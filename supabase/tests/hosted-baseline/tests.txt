@@ -24,3 +24,4 @@ chat-groups.sql
 chat-safety.sql
 open-beta.sql
 terms-acceptance.sql
+safety-extension.sql

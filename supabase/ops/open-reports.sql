@@ -7,7 +7,7 @@
 --   item           'report', 'block' or 'due'
 --   id             the report's id, for close-report.sql, remove-reported-message.sql and suspend-account.sql
 --   created_at     when the report, or the block, was made
---   reason         harassment, spam, inappropriate or other
+--   reason         illegal, child_safety, intimate_image, harassment, spam, inappropriate or other
 --   details        the reporter's own words, if any ('due': how many, and what to run)
 --   frozen_body    the reported message's words as they were when it was reported (none for a report about a person)
 --   reporter_name  who reported ('block': who blocked)
@@ -15,7 +15,8 @@
 --   resbite_title  the resbite the report came from
 --   resbite_date   that resbite's date, in its own time zone
 -- The rows:
---   'report'  every open report, oldest first;
+--   'report'  every open report: child_safety first, then intimate_image, then illegal, then the rest, each oldest
+--             first (docs/compliance/moderation-standard.md section 4, step 3);
 --   'block'   every block made in the last 7 days, newest first: who blocked whom and when, and nothing else (no message
 --             text; a block pushes nobody). Seven days covers a missed daily read;
 --   'due'     one row while closed reports are due: closed more than private.report_keep_days() days ago (180), or
@@ -50,4 +51,6 @@ from (
      and (not exists (select 1 from public.profiles x where x.id = r.frozen_author) or private.deletion_pending(r.frozen_author))))) d
  where d.n > 0
 ) x
-order by part, case when part = 1 then created_at end, case when part = 2 then created_at end desc, id;
+order by part,
+ case when part = 1 then case reason when 'child_safety' then 0 when 'intimate_image' then 1 when 'illegal' then 2 else 3 end end,
+ case when part = 1 then created_at end, case when part = 2 then created_at end desc, id;
