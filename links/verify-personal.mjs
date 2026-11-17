@@ -11,6 +11,7 @@ import { tmpdir } from "node:os";
 import { extname, join, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { generate } from "./generate.mjs";
+import { PAGE_COPY, numberNotice } from "./assets/personal-flow.mjs";
 
 // Playwright lives in mobile/node_modules; resolve it from there whatever the working directory.
 const require = createRequire(new URL("../mobile/package.json", import.meta.url));
@@ -32,6 +33,7 @@ const LONG_LINK = "LongLongLongLongLongLo";
 const STALE = "StaleStaleStaleStaleSt"; // An invitation whose event has started.
 const INVITED = "447700900834";
 const OTHER = "447700900534"; // Another person's number with the same last two digits.
+const PRIVACY_URL = "https://link.resbite.com/privacy"; // The local origin is http:, which personal.js never links.
 const SENT_CODE = "123456"; // The code the text message carried.
 const PLAN_ID = "55555555-5555-4555-8555-555555555555";
 /** Where the page keeps its session for one invitation code. */
@@ -40,7 +42,7 @@ const COPY = {
   invited: "Marcos invited you",
   confirm: "Confirm it’s you",
   confirmBody: "Type the number Marcos invited. We’ll text it a code.",
-  tick: "I’m 18 or over and I accept the Terms of Use.",
+  tick: PAGE_COPY.tick,
   ageHelper: "Resbite is for people aged 18 and over.",
   wrongNumber: "That isn’t the number Marcos invited.",
   codeHeading: "Enter the code",
@@ -96,7 +98,7 @@ Object.assign(process.env, {
   APP_STORE_URL,
   TERMS_VERSION: "2026-10",
   TERMS_URL: "https://www.resbite.com/terms",
-  PRIVACY_URL: "",
+  PRIVACY_URL,
 });
 const dir = await mkdtemp(join(tmpdir(), "resbite-personal-"));
 const out = await generate("https://link.resbite.com", "ABCDE12345", "com.resbite.app", join(dir, "out"), { legal: "draft" });
@@ -295,6 +297,30 @@ const visible = (locator) => locator.filter({ visible: true });
 const heading = (page, name) => visible(page.getByRole("heading", { name, exact: true }));
 const button = (page, name) => visible(page.getByRole("button", { name, exact: true }));
 const text = (page, value) => visible(page.getByText(value, { exact: true }));
+/** The invitee notice sits between the number and Send code, with the right to object on its own line (/i/). */
+async function invitationNotice(page, who) {
+  const expected = numberNotice({ open: false, who, privacyUrl: PRIVACY_URL });
+  const notice = page.locator("#number-notice");
+  await expect(notice).toBeVisible();
+  assert.equal(((await notice.textContent()) ?? "").trim(), expected.notice.map((p) => p.text).join(""));
+  await expect(notice.getByRole("link", { name: "Privacy Policy" })).toHaveAttribute("href", `${PRIVACY_URL}#if-someone-invited-you-by-your-number`);
+  const objection = page.locator(".objection");
+  await expect(objection).toBeVisible();
+  await expect(objection.locator("strong")).toHaveText("Right to object:");
+  await expect(page.locator("#number-notice .objection")).toHaveCount(0);
+  const box = async (loc) => loc.boundingBox();
+  const [n, num, send] = [await box(notice), await box(page.getByLabel("Mobile number", { exact: true })), await box(page.getByRole("button", { name: "Send code" }))];
+  assert.ok(n.y >= num.y + num.height, "the notice is below the number");
+  assert.ok(n.y + n.height <= send.y, "the notice is above Send code");
+  const original = page.viewportSize();
+  for (const width of [390, 320]) {
+    await page.setViewportSize({ width, height: 844 });
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `no sideways scroll at ${width} with the notice`);
+  }
+  await page.setViewportSize(original);
+  await expect(page.getByRole("navigation", { name: "Legal" }).getByRole("link")).toHaveCount(4);
+}
+
 /**
  * The number input keeps most of its field's width: the country sits on its own row above it, so a narrow phone
  * still has room to type (at least 70% of the .field around #number).
@@ -338,11 +364,11 @@ try {
     await expect(text(page, "Country")).toBeVisible();
     assert.equal(await country.getAttribute("aria-label"), null, "the visible label names the select");
     await numberFillsField(page, 390);
-    assert.match((await number.getAttribute("aria-describedby")) ?? "", /^confirm-error$/, "no hint about numbers from outside the UK");
+    assert.equal(await number.getAttribute("aria-describedby"), "confirm-error number-notice", "the notice describes the number");
     await expect(page.getByText("Outside the UK?")).toHaveCount(0);
     await expect(tick).not.toBeChecked();
-    await expect(page.getByRole("link", { name: "Terms", exact: true })).toHaveAttribute("href", "https://www.resbite.com/terms");
-    await expect(page.getByRole("link", { name: "Privacy Policy" })).toHaveCount(0);
+    await expect(page.locator("#terms-line").getByRole("link", { name: "Terms of Use", exact: true })).toHaveAttribute("href", "https://www.resbite.com/terms");
+    await expect(page.locator("#terms-line").getByRole("link", { name: "Privacy Policy" })).toHaveAttribute("href", PRIVACY_URL);
     await expect(text(page, COPY.ageHelper)).toBeVisible();
     await expect(button(page, "Send code")).toBeDisabled();
     await number.fill("07700 900834");
@@ -350,6 +376,7 @@ try {
     await expect(button(page, "Send code")).toBeDisabled();
     assert.equal(f.log.length, 0, "nothing is sent before the tick");
     await tick.check();
+    await invitationNotice(page, "Marcos");
     await expect(text(page, COPY.ageHelper)).toBeHidden();
     await expect(button(page, "Send code")).toBeEnabled();
     // An unusable number is refused on the page.
@@ -654,6 +681,7 @@ try {
     assert.equal(await page.locator(".dot").getAttribute("data-initial"), "P");
     await button(page, "Answer").click();
     await expect(text(page, "Type the number Pedro invited. We’ll text it a code.")).toBeVisible();
+    await expect(page.locator("#number-notice")).toContainText("Pedro gave Resbite Ltd this number to invite you.");
     await page.getByRole("checkbox", { name: COPY.tick, exact: true }).check();
     await page.getByLabel("Mobile number", { exact: true }).fill("07700 900111");
     await button(page, "Send code").click();
@@ -671,6 +699,7 @@ try {
     await button(page, "Answer").click();
     await expect(heading(page, COPY.confirm)).toBeVisible();
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), "no sideways scroll on the confirm step");
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), "no sideways scroll with the notice");
     await f.done();
   }
 
@@ -682,12 +711,13 @@ try {
     await button(page, "Answer").click();
     await expect(heading(page, COPY.confirm)).toBeVisible();
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), "no sideways scroll at 320");
+    await invitationNotice(page, "Marcos");
     await numberFillsField(page, 320);
     await f.done();
   }
 
   console.log(
-    "PASS: /i/<code> in headless Chrome: Answer → the 18+ tick → a wrong number (checked, no code) → the right number (Argentina chosen, then +44 typed: the dropdown follows the number; sent whole) → the name's label and helper → /otp → a wrong code → 000000 checked as typed and refused like any wrong code → the sent code verified as typed → name and Going → answer_phone_invitation → direction A (benefits, Get Resbite → app store, Not now); a reload restores the answer (refreshing an expired session first) and changing it to Can't go shows the softer screen; cancelled, happened and inactive pages have no form; Not you? Sign out (on the answer and done steps: a local logout with the token, the kept entry cleared, back to the invitation, even when the logout fails); the session is kept per code with the full verified number until the event starts, so another code's, another number's (same last two digits) and a started event's are never restored; the server still refuses a hand-edited other number; too many tries; a lost connection; focus on each step's heading; no 000000 anywhere; no request beyond the page's origin and the intercepted Supabase host; the country on its own labelled row, so the number input keeps at least 70% of its field at 390 and 320px.",
+    "PASS: /i/<code> in headless Chrome: Answer → the 18+ tick → a wrong number (checked, no code) → the right number (Argentina chosen, then +44 typed: the dropdown follows the number; sent whole) → the name's label and helper → /otp → a wrong code → 000000 checked as typed and refused like any wrong code → the sent code verified as typed → name and Going → answer_phone_invitation → direction A (benefits, Get Resbite → app store, Not now); a reload restores the answer (refreshing an expired session first) and changing it to Can't go shows the softer screen; cancelled, happened and inactive pages have no form; Not you? Sign out (on the answer and done steps: a local logout with the token, the kept entry cleared, back to the invitation, even when the logout fails); the session is kept per code with the full verified number until the event starts, so another code's, another number's (same last two digits) and a started event's are never restored; the server still refuses a hand-edited other number; too many tries; a lost connection; focus on each step's heading; no 000000 anywhere; no request beyond the page's origin and the intercepted Supabase host; the country on its own labelled row, so the number input keeps at least 70% of its field at 390 and 320px; the invitee notice beside the number (and, on /i/, the right to object on its own line); the footer.",
   );
 } finally {
   await browser?.close();

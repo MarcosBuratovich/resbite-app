@@ -81,7 +81,49 @@ export const PAGE_COPY = {
   notAdded: "You weren’t added to this resbite.",
   alreadyIn: "You’re on this resbite.",
   openApp: "Open Resbite",
+  // The notice beside the number field: the words of docs/legal/invitee-notice-short.md, tested against it.
+  personalNotice: (who) =>
+    `${who} gave Resbite Ltd this number to invite you. We use it to text you a code. Confirming it creates a Resbite account with your number, name and answer; other guests never see your number. Unanswered, the number is deleted within 30 days after the resbite ends. Privacy Policy`,
+  openNotice: (host) =>
+    `Resbite Ltd uses your number to text you a code and send your request to ${host}. Confirming it creates a Resbite account with your number, name and answer; other guests never see your number. We delete the account after 12 months without a resbite, or sooner if you ask at privacy@resbite.com. Privacy Policy`,
+  objectionLabel: "Right to object:",
+  objection: "tell us at any time to stop using your number. Email privacy@resbite.com and we’ll delete it and stop anyone inviting you by number.",
 };
+
+/** The Privacy Policy section the personal notice links to (a required anchor of /privacy). */
+export const INVITEE_ANCHOR = "if-someone-invited-you-by-your-number";
+
+const PRIVACY_MAIL = "privacy@resbite.com";
+
+/** `text` split on the phrases in `links` (longest first); `href` is "" for plain text and for a phrase with no link. */
+export function linkedParts(text, links) {
+  const phrases = Object.keys(links).sort((a, b) => b.length - a.length);
+  if (!phrases.length) return text ? [{ text, href: "" }] : [];
+  const pattern = new RegExp(`(${phrases.map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})`);
+  return text
+    .split(pattern)
+    .filter((part) => part !== "")
+    .map((part) => ({ text: part, href: links[part] || "" }));
+}
+
+/**
+ * The notice beside the number field and, on the personal page, the right to object (shown apart).
+ * `who` gave the number on /i/ (the inviter) or decides the request on /r/ (the host).
+ */
+export function numberNotice({ open, who, privacyUrl }) {
+  const policy = privacyUrl ? (open ? privacyUrl : `${privacyUrl}#${INVITEE_ANCHOR}`) : "";
+  const links = { "Privacy Policy": policy, [PRIVACY_MAIL]: `mailto:${PRIVACY_MAIL}` };
+  const notice = linkedParts(open ? PAGE_COPY.openNotice(who) : PAGE_COPY.personalNotice(who), links);
+  if (open) return { notice, objection: null };
+  return {
+    notice,
+    objection: [
+      { text: PAGE_COPY.objectionLabel, href: "", strong: true },
+      { text: " ", href: "" },
+      ...linkedParts(PAGE_COPY.objection, links),
+    ],
+  };
+}
 
 /** The error keys the reducer holds; anything else in `error` is a server message shown as it came. */
 const ERROR_KEYS = new Set([

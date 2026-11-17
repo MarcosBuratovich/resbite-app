@@ -100,3 +100,9 @@ h1[tabindex="-1"]:focus { outline: none; }
 
 /* Long unbroken names wrap instead of widening the page. */
 .invited, .muted, .lead, .helper, #step-app p { overflow-wrap: anywhere; min-width: 0; }
+
+/* The invitee notice beside the number field (legal pages, plan 5). */
+.number-notice { display: flex; flex-direction: column; gap: 10px; }
+.privacy-note { margin: 0; font-size: 15px; color: var(--muted); overflow-wrap: anywhere; min-width: 0; }
+.privacy-note a { color: var(--aqua-dark); text-underline-offset: 3px; }
+.objection { padding-top: 10px; border-top: 1px solid var(--line); }
