@@ -90,7 +90,8 @@ test("blocked people, the contact line and the reports line read exactly (G-S10,
   assert.equal(S.copied, "Copied");
   assert.equal(
     S.reportsPrivacy,
-    "If you report a message or a person, the Resbite team reads the report and keeps a copy of what was reported, even if the message or that person’s account is deleted. If you delete your account, the reports you sent are deleted too. A report is deleted 180 days after the team closes it.",
+    // AS-R2: a deleted reporter's reports stay, without the name, until the team closes them.
+    "If you report a message or a person, the Resbite team reads the report and keeps a copy of what was reported, even if the message or that person’s account is deleted. If you delete your account, the reports you sent are kept until the team closes them, without your name. A report is deleted 180 days after the team closes it.",
   );
 });
 

@@ -40,7 +40,7 @@ const PRIVACY_ABOUT =
 const CHAT_CORE =
   "Chat messages are stored on our servers so everyone in a resbite’s chat can read them, including people who join later. They aren’t end-to-end encrypted.";
 const REPORTS =
-  "If you report a message or a person, the Resbite team reads the report and keeps a copy of what was reported, even if the message or that person’s account is deleted. If you delete your account, the reports you sent are deleted too. A report is deleted 180 days after the team closes it.";
+  "If you report a message or a person, the Resbite team reads the report and keeps a copy of what was reported, even if the message or that person’s account is deleted. If you delete your account, the reports you sent are kept until the team closes them, without your name. A report is deleted 180 days after the team closes it.";
 const BLOCKS = "Blocks stay until you undo them. The Resbite team can see who blocked whom.";
 const NONE_BLOCKED = "You haven’t blocked anyone.";
 const OFFLINE = "Check your connection and try again.";
@@ -331,7 +331,7 @@ try {
     .getByRole("button", { name: "Delete account", exact: true })
     .click();
   await expect(
-    page.getByText("Deletion immediately closes access.", { exact: true }),
+    page.getByText("Deleting your account closes it straight away, on every device.", { exact: true }),
   ).toBeVisible();
   // The full warnings, and the former Privacy deletion paragraph, sit in "What happens".
   await page.getByRole("button", { name: "What happens", exact: true }).click();
@@ -339,10 +339,10 @@ try {
     page.getByRole("heading", { name: "What happens", exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByText(/^Future plans you organized are cancelled\./),
+    page.getByText(/^Resbites you host that haven’t happened yet are cancelled/),
   ).toBeVisible();
   await expect(
-    page.getByText(/^Signing out does not delete your account or shared plans\./),
+    page.getByText(/^Deleting the app or signing out doesn’t delete your account\./),
   ).toBeVisible();
   await page.getByRole("button", { name: "Close sheet", exact: true }).click();
   await expect(
@@ -350,7 +350,7 @@ try {
   ).toHaveCount(0);
   await expect(
     page.getByText(
-      "You are exploring the design. Preview cannot delete a real account.",
+      "You’re exploring the design. Preview can’t delete a real account.",
       { exact: true },
     ),
   ).toBeVisible();
@@ -372,14 +372,16 @@ try {
     path: join(tmpdir(), "resbite-deletion-preview.png"),
     fullPage: true,
   });
+  pass("preview: Delete account says it closes the account straight away, What happens reads the new sheet, and nothing is requested");
   if (!enabled) {
     await page.goto(`${base}/delete-account`);
     await expect(
-      page.getByText(
-        /Account deletion is not enabled in this development build/,
-      ),
+      page.getByText("To delete your account, email privacy@resbite.com.", {
+        exact: true,
+      }),
     ).toBeVisible();
     assert.equal(requests.length, 0);
+    pass("disabled: Delete account gives the privacy address and requests nothing");
   } else {
     const user = {
       id: "11111111-1111-4111-8111-111111111111",
@@ -416,12 +418,9 @@ try {
       user,
     };
     await page.evaluate(
-      ({ session, user }) => {
+      ({ key, session, user }) => {
         sessionStorage.clear();
-        sessionStorage.setItem(
-          "sb-ewcsgvhuojxdpaspwsrx-auth-token",
-          JSON.stringify(session),
-        );
+        sessionStorage.setItem(key, JSON.stringify(session));
         sessionStorage.setItem(
           `resbite.people.v1.${user.id}`,
           JSON.stringify({ groups: [], plans: {}, invitations: [] }),
@@ -432,21 +431,30 @@ try {
         );
         sessionStorage.setItem("resbite.pending-invite", "a".repeat(64));
       },
-      { session, user },
+      { key: AUTH_STORAGE_KEY, session, user },
     );
     await page.unroute("**/*.supabase.co/**");
     let accepted = null,
       requestCount = 0,
       proofCount = 0,
       statusCount = 0,
-      otpCount = 0;
-    // The Apple-only case below swaps these: the signed-in account, the token the app sends as
-    // Authorization, the proof the worker should receive, and who Apple's sign-in returns.
+      otpCount = 0,
+      exchangeCount = 0;
+    // The phone-only and Apple cases below swap these: the signed-in account, the token the app sends as
+    // Authorization, the proof the worker should receive, the code type and session a verification answers with,
+    // the Apple authorisation code the request carries (ASR2-8: only Apple's proof has one), and who Apple's
+    // sign-in returns.
     let current = user,
       expectedAuthorization = token,
       expectedProof = token,
+      expectedVerifyType = "email",
+      verifySession = session,
+      expectedAppleCode = undefined,
       appleProof = null;
-    const appleNonces = [];
+    const appleNonces = [],
+      otpBodies = [],
+      verifyBodies = [],
+      requestBodies = [];
     await page.route("**/*.supabase.co/**", async (route) => {
       const req = route.request(),
         path = new URL(req.url()).pathname;
@@ -464,13 +472,20 @@ try {
         return reply({ id: current.id, display_name: "Fixture", avatar_path: null });
       if (path === "/auth/v1/otp") {
         otpCount++;
+        otpBodies.push(req.postDataJSON());
         assert.equal(req.postDataJSON().create_user, false);
         return reply({});
       }
       if (path === "/auth/v1/verify") {
         proofCount++;
-        assert.equal(req.postDataJSON().type, "email");
-        return reply(session);
+        verifyBodies.push(req.postDataJSON());
+        assert.equal(req.postDataJSON().type, expectedVerifyType);
+        return reply(verifySession);
+      }
+      // Plan 1 retired the test-code swap: a deletion code is a real SMS code, never exchanged.
+      if (path === "/rest/v1/rpc/exchange_test_code") {
+        exchangeCount++;
+        return reply({ message: "Fixture: retired" }, 404);
       }
       if (path === "/auth/v1/token") {
         proofCount++;
@@ -495,7 +510,9 @@ try {
             : reply({}, 404);
         }
         assert.equal(body.action, "request");
+        requestBodies.push(body);
         assert.equal(body.proof, expectedProof);
+        assert.equal(body.appleAuthorizationCode, expectedAppleCode);
         assert.equal(req.headers().authorization, `Bearer ${expectedAuthorization}`);
         assert.equal(body.recoveryToken.length, 64);
         const saved = await page.evaluate(
@@ -513,7 +530,10 @@ try {
     await page.goto(`${base}/delete-account`);
     // An email account opens on the code (it may never have had a password); the password is one tap away.
     await expect(
-      page.getByRole("button", { name: "Send verification code", exact: true }),
+      page.getByText(`We’ll email a code to ${user.email}.`, { exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Send code", exact: true }),
     ).toBeVisible();
     await expect(
       page.getByLabel("Current password", { exact: true }),
@@ -522,7 +542,7 @@ try {
       .getByRole("button", { name: "Use my password instead", exact: true })
       .click();
     await expect(
-      page.getByRole("button", { name: "Send verification code", exact: true }),
+      page.getByRole("button", { name: "Send code", exact: true }),
     ).toHaveCount(0);
     await expect(
       page.getByRole("button", { name: "Use an email code instead", exact: true }),
@@ -537,20 +557,20 @@ try {
       .getByRole("button", { name: "Permanently delete account", exact: true })
       .click();
     await expect(
-      page.getByText(/Your deletion request is accepted/),
+      page.getByText(/We’ve accepted your request/),
     ).toBeVisible();
     assert.equal(requestCount, 1);
     assert.equal(proofCount, 1);
     assert.ok(statusCount >= 2);
     const remaining = await page.evaluate(
-      (id) => ({
+      ({ id, key }) => ({
         journal: sessionStorage.getItem(`resbite.create-journal.v1.${id}`),
         people: sessionStorage.getItem(`resbite.people.v1.${id}`),
         invite: sessionStorage.getItem("resbite.pending-invite"),
-        session: sessionStorage.getItem("sb-ewcsgvhuojxdpaspwsrx-auth-token"),
+        session: sessionStorage.getItem(key),
         receipt: sessionStorage.getItem(`resbite.deletion.${id}`),
       }),
-      user.id,
+      { id: user.id, key: AUTH_STORAGE_KEY },
     );
     assert.equal(remaining.journal, null);
     assert.equal(remaining.people, null);
@@ -562,7 +582,7 @@ try {
       .getByRole("button", { name: "Check deletion status", exact: true })
       .click();
     await expect(
-      page.getByText(/Your deletion request is accepted/),
+      page.getByText(/We’ve accepted your request/),
     ).toBeVisible();
     assert.equal(requestCount, 1);
     assert.equal(proofCount, 1);
@@ -570,29 +590,28 @@ try {
     // Fresh synthetic account session: OTP plus a failed local journal cleanup.
     accepted = null;
     await page.evaluate(
-      ({ session, user }) => {
+      ({ key, session, user }) => {
         sessionStorage.clear();
-        sessionStorage.setItem(
-          "sb-ewcsgvhuojxdpaspwsrx-auth-token",
-          JSON.stringify(session),
-        );
+        sessionStorage.setItem(key, JSON.stringify(session));
         sessionStorage.setItem(`resbite.create-journal.v1.${user.id}`, "retry-journal");
       },
-      { session, user },
+      { key: AUTH_STORAGE_KEY, session, user },
     );
     await page.reload();
     // The code step is the default: no switch needed.
     await page
-      .getByRole("button", { name: "Send verification code", exact: true })
+      .getByRole("button", { name: "Send code", exact: true })
       .click();
     await expect(
-      page.getByText("Check your email for the verification code.", {
+      page.getByText("Check your email for the code.", {
         exact: true,
       }),
     ).toBeVisible();
     assert.equal(otpCount, 1);
+    assert.equal(otpBodies[0].email, user.email);
+    assert.equal(otpBodies[0].phone, undefined);
     await page
-      .getByLabel("Email verification code", { exact: true })
+      .getByLabel("Code from the email", { exact: true })
       .fill("123456");
     await page
       .getByLabel("Type DELETE to confirm", { exact: true })
@@ -623,7 +642,7 @@ try {
       .getByRole("button", { name: "Check deletion status", exact: true })
       .click();
     await expect(
-      page.getByText(/Your deletion request is accepted/),
+      page.getByText(/We’ve accepted your request/),
     ).toBeVisible();
     assert.equal(requestCount, 2);
     assert.equal(proofCount, 2);
@@ -634,16 +653,108 @@ try {
       ),
       null,
     );
-    // GI2-D10: an Apple-only account confirms by signing in with Apple again. Web has no Sign in
-    // with Apple, so Apple's native module is stubbed at Expo's module boundary (on web,
-    // expo-modules-core reads native modules from ExpoDomWebView.expoModulesProxy): the app's own appleSignInDeps,
-    // nonce and id-token call run as on the phone, and the id-token endpoint is intercepted above.
+    pass("email: the code first and the password one switch away; a lost reply, a failed cleanup and a saved receipt each end on the accepted request");
+    // ASR2-8: neither email proof carried an Apple authorisation code.
+    assert.equal(requestBodies.length, 2);
+    assert.ok(
+      requestBodies.every((b) => !("appleAuthorizationCode" in b)),
+      "an email proof sends no Apple code",
+    );
     const jwt = (claims) =>
       [
         Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url"),
         Buffer.from(JSON.stringify({ role: "authenticated", exp: expires_at, ...claims })).toString("base64url"),
         "local-fixture-only",
       ].join(".");
+    // ASR2-2, DEL-2: a phone-only account (no email, as Auth stores one) confirms with a code texted to its number. The
+    // code goes out and is checked from the screen's isolated client, never through a test-code swap, and the request
+    // carries that sign-in's token as the proof.
+    const phoneUser = {
+      ...user,
+      id: "77777777-7777-4777-8777-777777777777",
+      email: "",
+      email_confirmed_at: null,
+      phone: "447700900834",
+      phone_confirmed_at: "2026-01-01T00:00:00Z",
+      app_metadata: { provider: "phone", providers: ["phone"] },
+    };
+    const phoneToken = jwt({ sub: phoneUser.id });
+    const phoneSession = { ...session, access_token: phoneToken, user: phoneUser };
+    const phoneProofSession = {
+      ...phoneSession,
+      access_token: jwt({
+        sub: phoneUser.id,
+        amr: [{ method: "otp", timestamp: Math.floor(Date.now() / 1000) }],
+      }),
+      refresh_token: "fixture-phone-proof",
+    };
+    accepted = null;
+    current = phoneUser;
+    expectedAuthorization = phoneToken;
+    expectedProof = phoneProofSession.access_token;
+    expectedVerifyType = "sms";
+    verifySession = phoneProofSession;
+    const phoneBefore = { otpCount, proofCount, requestCount };
+    await page.evaluate(
+      ({ key, session }) => {
+        sessionStorage.clear();
+        sessionStorage.setItem(key, JSON.stringify(session));
+      },
+      { key: AUTH_STORAGE_KEY, session: phoneSession },
+    );
+    await page.goto(`${base}/delete-account`);
+    await expect(
+      page.getByText("We’ll text a code to +44 7700 900834.", { exact: true }),
+    ).toBeVisible();
+    // No email, password or Apple step for this account.
+    for (const name of [
+      "Use my password instead",
+      "Use an email code instead",
+      "Continue with Apple",
+    ])
+      await expect(page.getByRole("button", { name, exact: true })).toHaveCount(0);
+    await expect(page.getByText(/^We’ll email a code/)).toHaveCount(0);
+    const phoneDelete = page.getByRole("button", {
+      name: "Permanently delete account",
+      exact: true,
+    });
+    const phoneCode = page.getByLabel("Code from the text", { exact: true });
+    // A code typed before one was sent can't delete.
+    await page.getByLabel("Type DELETE to confirm", { exact: true }).fill("DELETE");
+    await phoneCode.fill("123456");
+    await expect(phoneDelete).toBeDisabled();
+    await page.getByRole("button", { name: "Send code", exact: true }).click();
+    await expect(
+      page.getByText("We sent a 6-digit code to +44 7700 900834.", { exact: true }),
+    ).toBeVisible();
+    assert.equal(otpCount, phoneBefore.otpCount + 1);
+    const phoneOtp = otpBodies.at(-1);
+    assert.equal(phoneOtp.phone, "+447700900834");
+    assert.equal(phoneOtp.create_user, false);
+    assert.equal(phoneOtp.email, undefined);
+    await phoneCode.fill("123456");
+    await expect(phoneDelete).toBeEnabled();
+    await phoneDelete.click();
+    await expect(page.getByText(/We’ve accepted your request/)).toBeVisible();
+    assert.equal(proofCount, phoneBefore.proofCount + 1);
+    assert.deepEqual(
+      { phone: verifyBodies.at(-1).phone, token: verifyBodies.at(-1).token, type: verifyBodies.at(-1).type },
+      { phone: "+447700900834", token: "123456", type: "sms" },
+    );
+    assert.equal(requestCount, phoneBefore.requestCount + 1, "one deletion request");
+    assert.equal(requestBodies.at(-1).proof, phoneProofSession.access_token);
+    assert.equal("appleAuthorizationCode" in requestBodies.at(-1), false);
+    assert.equal(exchangeCount, 0, "no test-code swap");
+    assert.equal(
+      await page.evaluate((key) => sessionStorage.getItem(key), AUTH_STORAGE_KEY),
+      null,
+      "signed out after the request",
+    );
+    pass("phone: a phone-only account confirms with a code texted to +447700900834 (sms, no new user, no test-code swap) and makes one request");
+    // GI2-D10: an Apple-only account confirms by signing in with Apple again. Web has no Sign in
+    // with Apple, so Apple's native module is stubbed at Expo's module boundary (on web,
+    // expo-modules-core reads native modules from ExpoDomWebView.expoModulesProxy): the app's own appleSignInDeps,
+    // nonce and id-token call run as on the phone, and the id-token endpoint is intercepted above.
     const appleUser = {
       ...user,
       id: "22222222-2222-4222-8222-222222222222",
@@ -665,6 +776,8 @@ try {
     accepted = null;
     current = appleUser;
     expectedAuthorization = appleToken;
+    // ASR2-8: the code from Apple's sheet goes to the request for revocation.
+    expectedAppleCode = "fixture-apple-code";
     await page.addInitScript(() => {
       globalThis.__appleSheet = { result: "cancel", nonces: [] };
       globalThis.ExpoDomWebView = {
@@ -695,14 +808,11 @@ try {
       };
     });
     await page.evaluate(
-      ({ session, user }) => {
+      ({ key, session }) => {
         sessionStorage.clear();
-        sessionStorage.setItem(
-          "sb-ewcsgvhuojxdpaspwsrx-auth-token",
-          JSON.stringify(session),
-        );
+        sessionStorage.setItem(key, JSON.stringify(session));
       },
-      { session: appleSession, user: appleUser },
+      { key: AUTH_STORAGE_KEY, session: appleSession },
     );
     await page.goto(`${base}/delete-account`);
     const appleButton = page.getByRole("button", {
@@ -710,16 +820,17 @@ try {
       exact: true,
     });
     await expect(
-      page.getByText("To confirm it’s you, sign in with Apple again.", {
+      page.getByText("Type DELETE, then confirm with Apple.", {
         exact: true,
       }),
     ).toBeVisible();
-    await expect(page.getByText(appleUser.email, { exact: true })).toBeVisible();
+    // Apple linked: Apple is the proof even though the account has an email (ASR2-2).
+    await expect(page.getByText(/^We’ll email a code/)).toHaveCount(0);
     await expect(appleButton).toBeVisible();
     await expect(appleButton).toBeDisabled();
     for (const name of [
       "Permanently delete account",
-      "Send verification code",
+      "Send code",
       "Use an email code instead",
       "Use my password instead",
     ])
@@ -733,9 +844,7 @@ try {
     await expect(appleButton).toBeEnabled();
     const sheetNonces = () => page.evaluate(() => globalThis.__appleSheet.nonces);
     const appSession = () =>
-      page.evaluate(() =>
-        JSON.parse(sessionStorage.getItem("sb-ewcsgvhuojxdpaspwsrx-auth-token")),
-      );
+      page.evaluate((key) => JSON.parse(sessionStorage.getItem(key)), AUTH_STORAGE_KEY);
     const before = { proofCount, requestCount };
     // A closed sheet: nothing is requested and nothing is said.
     await appleButton.click();
@@ -763,7 +872,7 @@ try {
     expectedProof = appleProof.access_token;
     await appleButton.click();
     await expect(
-      page.getByText(/Your deletion request is accepted/),
+      page.getByText(/We’ve accepted your request/),
     ).toBeVisible();
     assert.equal(requestCount, before.requestCount + 1);
     assert.equal(proofCount, before.proofCount + 2);
@@ -776,12 +885,15 @@ try {
       createHash("sha256").update(appleNonces[1]).digest("hex"),
     );
     assert.equal(await appSession(), null);
-    assert.ok(
-      await page.evaluate(
-        (id) => sessionStorage.getItem(`resbite.deletion.${id}`),
-        appleUser.id,
-      ),
+    const appleReceipt = await page.evaluate(
+      (id) => sessionStorage.getItem(`resbite.deletion.${id}`),
+      appleUser.id,
     );
+    assert.ok(appleReceipt);
+    // The code reached the request (above) and was never saved with the receipt.
+    assert.equal(requestBodies.at(-1).appleAuthorizationCode, "fixture-apple-code");
+    assert.equal(appleReceipt.includes("fixture-apple-code"), false);
+    pass("apple: a closed sheet is quiet, a different Apple ID is refused, and Apple's own proof deletes with its code sent, never saved");
   }
   assert.deepEqual(errors, []);
   // Blocked people, signed in (G-S10).
@@ -1002,7 +1114,7 @@ try {
     pass(`blocked: an 18- and a 40-letter single-word name wrap inside the card at ${at}, Christopher stays whole, each Unblock at least 44 pt`);
   }
   console.log(
-    `Deletion UI passed: preview/disabled no outbound calls${enabled ? ", enabled synthetic password/OTP (an email account opens on the code, the password one switch away), lost reply, local cleanup failure/retry including drafts, restart receipt recovery, Apple-only account confirms with Apple (closed sheet quiet, different Apple ID refused with the app session unchanged, isolated proof)" : ""}. No real account, email or deletion request.`,
+    `Deletion UI passed: preview/disabled no outbound calls${enabled ? ", enabled synthetic password/OTP (an email account opens on the code, the password one switch away), lost reply, local cleanup failure/retry including drafts, restart receipt recovery, phone-only account confirms with a texted code (no test-code swap), Apple-only account confirms with Apple (closed sheet quiet, different Apple ID refused with the app session unchanged, isolated proof, Apple's code sent for revocation and never saved)" : ""}. No real account, email or deletion request.`,
   );
 } finally {
   await browser.close();

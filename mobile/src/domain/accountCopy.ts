@@ -33,6 +33,20 @@ export const accessTitles: Record<AccessState, string> = {
   pending: "Waiting for access",
 };
 
+/**
+ * The suspended screen's two lines (B6, DEL-7): the first as today; the second gives the build's support address to ask
+ * why or to appeal, or today's line when the build has none.
+ */
+export function suspendedLines(address: string | null): string[] {
+  return [
+    "This account can’t use Resbite at the moment.",
+    address ? `To ask why, or to appeal, write to ${address}.` : "If you think this is a mistake, contact the Resbite team.",
+  ];
+}
+
+/** The suspended screen's way to Delete account (D-19: a suspended account may delete in the app). */
+export const SUSPENDED_DELETE = "Delete account";
+
 /** Notifications' permission chip: the permission's title, or the checking and failure states. */
 export function permissionChip(permission: NotificationPermission | null, busy: boolean): string {
   if (permission) return permissionCopy[permission].title;

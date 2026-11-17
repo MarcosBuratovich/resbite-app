@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { PHONE_CODE_COPY, phoneCodeDeps, sendPhoneCode, verifyPhoneCode, type AuthError, type PhoneCodeDeps } from "./phoneCode";
-import { PHONE_COPY } from "../domain/phoneCopy";
+import { PHONE_COPY, takenLine } from "../domain/phoneCopy";
 
 const phone = "+447700900834";
 const wait = "Wait a minute, then send a new code.";
@@ -55,6 +55,17 @@ test("send errors map to copy and reasons", async () => {
   assert.equal(PHONE_CODE_COPY.taken, PHONE_COPY.taken);
   assert.deepEqual(await sendPhoneCode(harness({ otp: { message: "x", status: 429 } }).d, phone, "signup"), { ok: false, message: wait });
   assert.deepEqual(await sendPhoneCode(harness({ otp: { message: "x", status: 0 } }).d, phone, "signup"), { ok: false, message: connection });
+});
+
+test("the taken-number line gives the support address when the build has one (B6)", () => {
+  assert.equal(
+    takenLine("support@resbite.com"),
+    "This number already belongs to another Resbite account. Use a different number, or write to support@resbite.com.",
+  );
+  assert.equal(
+    takenLine(null),
+    "This number already belongs to another Resbite account. Use a different number, or ask the Resbite team for help.",
+  );
 });
 
 test("000000 is checked as typed, like any other code", async () => {
