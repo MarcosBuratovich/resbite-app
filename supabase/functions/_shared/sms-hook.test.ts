@@ -8,6 +8,7 @@ import {
   handleSendSms,
   hookSecrets,
   smsBody,
+  smsRouter,
   smsTarget,
   twilioSender,
   verifyHookSignature,
@@ -304,4 +305,29 @@ test("an accepted message counts as sent even if its reply body breaks (no retry
 test("a timed-out request is busy, not refused", async () => {
   const { f } = fakeFetch(() => { throw new DOMException("The operation was aborted due to timeout", "TimeoutError"); });
   assert.deepEqual(await twilioSender({ ...CONFIG, fetch: f })("+447700900834", smsBody("123456")), { ok: false, kind: "transient", status: 0, code: null });
+});
+
+test("the router sends /sweep to the sweep and everything else to the hook", async () => {
+  const seen: [string, Request][] = [];
+  const route = smsRouter({
+    async hook(r) { seen.push(["hook", r]); return new Response("hook"); },
+    async sweep(r) { seen.push(["sweep", r]); return new Response("sweep"); },
+  });
+  const cases: [string, "hook" | "sweep"][] = [
+    ["https://x.supabase.co/functions/v1/send-sms/sweep", "sweep"],
+    ["https://x.invalid/send-sms/sweep", "sweep"],
+    ["https://x.supabase.co/functions/v1/send-sms", "hook"],
+    ["https://x.invalid/send-sms?x=1", "hook"],
+    ["https://x.invalid/send-sms?next=/sweep", "hook"],
+    ["https://x.invalid/send-sms/sweeper", "hook"],
+  ];
+  for (const [url, expected] of cases) {
+    seen.length = 0;
+    const request = new Request(url, { method: "POST" });
+    const r = await route(request);
+    assert.equal(await r.text(), expected, url);
+    assert.equal(seen.length, 1, url);
+    assert.equal(seen[0][0], expected, url);
+    assert.equal(seen[0][1], request, url);
+  }
 });

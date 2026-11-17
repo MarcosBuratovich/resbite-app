@@ -71,7 +71,8 @@ function base64(bytes: ArrayBuffer): string {
   return btoa(binary);
 }
 
-function sameText(a: string, b: string): boolean {
+/** Compares two strings in time that depends only on their length. */
+export function sameText(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
   let diff = 0;
   for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
@@ -203,4 +204,13 @@ export function twilioSender(c: TwilioConfig): HookDeps["send"] {
     if (status === 429 || status >= 500) return { ok: false, kind: "transient", status, code };
     return { ok: false, kind: "config", status, code };
   };
+}
+
+/** One function, two routes: `…/send-sms/sweep` (the daily cron call) goes to the sweep, everything else to the hook.
+ * Only the path counts, never the query. */
+export function smsRouter(routes: {
+  hook(r: Request): Promise<Response>;
+  sweep(r: Request): Promise<Response>;
+}): (r: Request) => Promise<Response> {
+  return (r) => (new URL(r.url).pathname.endsWith("/sweep") ? routes.sweep(r) : routes.hook(r));
 }
