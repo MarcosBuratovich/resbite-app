@@ -329,7 +329,7 @@ The app waits in "Pending Developer Release". Release it only when every box is 
 - [ ] **Backup moderator on.** `ch3-gate.sh` shows `moderators` at least 2, with `moderators_pushed` equal. The owner and the backup agree who reads the queue in the first week. Today's `supabase/ops/open-reports.sql` read is done, and every open report is handled.
 - [ ] **Roll job checked.** The roll job check shows `roll-repeating-plans` active, run in the last 10 minutes, and no failures in the last day. The review group shows next week's occurrence.
 - [ ] **Sender healthy.** `deliver-notifications` ran in the last 2 minutes. The chat runbook's step 8 query shows `waiting` under 100.
-- [ ] **Deletion running.** The C2 clean-up job ran recently and no deletion job is stuck.
+- [ ] **Deletion running.** The C2 clean-up job ran recently and no deletion job is stuck. In the SQL editor, `select count(*) filter (where status in ('queued','processing') and requested_at < now() - interval '1 day') as stuck, max(attempts) filter (where status in ('queued','processing')) as max_attempts from private.account_deletion_jobs;` shows `stuck` 0. Held jobs are left out on purpose. Until Step 28's alerts exist, the owner runs the same query every week (`docs/compliance/data-requests.md` section 8).
 - [ ] **Documents live.** The legal pages show the solicitor-approved texts, with the effective date. The Terms version is the same on Vercel and in the build.
 - [ ] **SMS.** A real code arrives. The spend alert and the rate limit are as recorded.
 - [ ] **CAPTCHA** is on, and sign-in works.

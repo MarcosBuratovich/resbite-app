@@ -11,9 +11,10 @@
 -- never neither (refused: 23514). Run it once for each account and each series the case needs. An account's hold keeps
 -- that account's records and every series it hosted, joined or wrote in; a series' hold keeps the series' occurrences,
 -- guests, chat and covers. Until it is lifted, the account deletion's erasure, every retention purge, the photo and
--- cover clean-up and the two removal scripts leave what it keeps (removal hides and preserves: section 11.3). It does
--- not stop purge-closed-reports.sql run by hand, a person deleting their own message, or the logs and backups outside
--- the database (section 11.4).
+-- cover clean-up and the two removal scripts leave what it keeps (removal hides and preserves: section 11.3). A series'
+-- hold does not stop another person's own account deletion: only a hold on that person does (decision ASR2-4), so set
+-- one on each account whose records the case needs. It does not stop purge-closed-reports.sql run by hand, a person
+-- deleting their own message, or the logs and backups outside the database (section 11.4).
 -- The reason is one of 'csea', 'intimate_image', 'threat', 'police', 'nca', 'ofcom', 'coroner', 'court' or 'claim'.
 -- The case reference is the case number from the moderation or request log (letters, digits and hyphens, at most 40).
 -- The review date is three months ahead (section 11.5).

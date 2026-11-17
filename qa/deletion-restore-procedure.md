@@ -27,13 +27,19 @@ Do these steps in this order. The export must come after the last moment the app
    - The script is read-only. The file holds account ids: keep it in a private folder outside the repository, never commit it, and never paste it into a ticket, a chat or a log.
    - Record only the number of rows in the incident log.
    - Receipts outlive backups: a complete receipt is purged 30 days after completion, and backups are kept for 7 days. So an export taken behind the fence covers every deletion made since any backup that can be restored.
-4. **Turn the scheduled jobs off**, in the SQL editor:
+4. **Turn the scheduled jobs off**, in the SQL editor. First record which jobs exist, names and schedules only, in the incident log:
 
    ```sql
-   select cron.unschedule('cleanup-account'); select cron.unschedule('purge-deletion-receipts');
+   select jobname, schedule from cron.job;
    ```
 
-   Then nothing removes a file or a receipt while the restore is under way. If `roll-repeating-plans` is scheduled (`select jobname from cron.job`), unschedule it too (`select cron.unschedule('roll-repeating-plans');`). The fence doesn't stop it (section 3).
+   Then unschedule these:
+
+   ```sql
+   select cron.unschedule('cleanup-account'); select cron.unschedule('purge-deletion-receipts'); select cron.unschedule('retention-purge');
+   ```
+
+   Then nothing removes a file or a receipt, and nothing purges held records, while the restore is under way. If `roll-repeating-plans` is scheduled, unschedule it too (`select cron.unschedule('roll-repeating-plans');`). The fence doesn't stop it or `retention-purge` (section 3). Skip any job that the list doesn't show, because unscheduling a job that isn't there is an error. You can instead unschedule every job in the list and keep the list.
 
 ## 3. The fence
 
@@ -42,13 +48,13 @@ The fence went up in section 2, step 2, before the export. It stays up through t
 - With the Data API off, neither the app nor the workers can read or write: the app, the link site and the Edge Functions reach the database only through it (`delete-account` calls its database functions at `/rest/v1/rpc/...`). So no deletion is accepted after the export, and a restored account can't be used before the replay.
 - The CLI and the SQL editor don't need the Data API (section 2, step 3), so the export, the checks and the replay still run behind the fence.
 - Auth may still let a restored account sign in, but with the Data API off it can read and write nothing, and the replay ends it.
-- The fence does not stop jobs that run SQL inside the database, which is why section 2, step 4 unschedules `roll-repeating-plans`: it could roll a deleted host's weekly group before the replay cancels it. Schedule it again at reopening with `supabase/ops/schedule-roll-repeating-plans.sql`.
+- The fence does not stop jobs that run SQL inside the database, which is why section 2, step 4 unschedules `roll-repeating-plans` and `retention-purge`. `roll-repeating-plans` could roll a deleted host's weekly group before the replay cancels it. `retention-purge` (`private.run_retention`) could purge records whose legal hold the restore removed, before section 5, step 1 puts the holds right. Schedule them again at reopening (section 6).
 
 ## 4. Restore
 
 Restore from the dashboard (Database, Backups), with the fence still up. Point-in-time recovery is off (D-15), so the choice is one of the daily backups.
 
-- The restored database has the schedule the backup had. Check `select jobname from cron.job where jobname in ('cleanup-account','purge-deletion-receipts','roll-repeating-plans')`, and unschedule any that came back, with the lines in section 2, step 4.
+- The restored database has the schedule the backup had. Check `select jobname from cron.job where jobname in ('cleanup-account','purge-deletion-receipts','roll-repeating-plans','retention-purge')`, and unschedule any that came back, with the lines in section 2, step 4.
 - Check that the Data API and Realtime are still off after the restore, and turn them off again if the restore turned them back on.
 - If the backup predates `20261117110000_account_deletion_release.sql` (a restore in the first 7 days after it was applied), the replay function isn't there yet. Apply the migration again first, with the approved hash-guarded pattern of the runbook, and every later migration in its order.
 
@@ -66,7 +72,8 @@ Restore from the dashboard (Database, Backups), with the fence still up. Point-i
 
 ## 6. Reopen
 
-- Turn the Data API and Realtime back on. This takes the fence down. Schedule `roll-repeating-plans` again if section 2 unscheduled it.
+- Turn the Data API and Realtime back on. This takes the fence down. Schedule `roll-repeating-plans` again if section 2 unscheduled it, with `supabase/ops/schedule-roll-repeating-plans.sql`.
+- Schedule `retention-purge` again with `supabase/ops/schedule-retention.sql`, only after section 5, step 1 has put the holds right. That script also creates `cleanup-images` again, and is safe to run twice.
 - Watch the jobs until every replayed job is `complete` (minutes):
 
   ```sql

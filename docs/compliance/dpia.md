@@ -130,7 +130,7 @@ Two further factors push towards a DPIA: **criminal offence data** in reports (a
 
 | Data | Kept for |
 |---|---|
-| Non-users' numbers in `private.phone_invitations` | Until answered or revoked, or 30 days after the resbite ends, whichever comes first |
+| Non-users' numbers in `private.phone_invitations` | Until 30 days after the resbite ends, or sooner if revoked; an answer does not delete it |
 | Numbers in `private.plan_removals` | 30 days after a one-off ends; 90 days after a series' last occurrence |
 | Chat messages | 90 days after a one-off's chat closes; in a group, messages older than 12 months |
 | Plans, guest rows, meeting details, join requests, co-hosts, mutes | 12 months after a one-off ends, or after a series' last occurrence |
@@ -345,7 +345,7 @@ Each section says what happens (checked in the code), the risks, the measures wi
 - Measures:
   - Each number is held only inside one invitation (unique per resbite and number) or one series' removal; the code never joins these across hosts, never shows a non-user's number to anyone but the host who invited it, and never exports it. **Live.**
   - Both tables are in the private schema with no grant to any app or web role (`supabase/migrations/20261028120000_contact_invitations.sql:27-28`; `supabase/migrations/20261111130000_circles_of_trust.sql:55-56`). **Live.**
-  - Retention: invitations until answered or revoked, or 30 days after the resbite ends; removals 30 days after a one-off ends and 90 days after a series' last occurrence (C3). **To build.**
+  - Retention: invitations until 30 days after the resbite ends, or sooner if revoked (an answer does not delete one); removals 30 days after a one-off ends and 90 days after a series' last occurrence (C3). **To build.**
   - The App Review notes explain that numbers serve only the host's own invitation and are deleted on a schedule (A7, E6). **To build.**
 - Our view on 5.1.1(viii): the guideline targets apps that assemble profiles of people from other sources. Resbite stores a number only because a user, acting for themselves, chose to invite that one person or to keep that one person out of their own series, and keeps it only for that. `plan_removals` is the closest case, because it holds the number of someone a host turned away; it is kept per series, never used for anything else, and deleted 30 or 90 days after the resbite or series ends. Whether App Review shares this reading is a judgement (UNVERIFIED).
 - Residual: remote × significant = **low**.
@@ -575,7 +575,7 @@ The remaining chat risks (a breach, no end-to-end encryption) are R19.
 - Residual: remote × minimal = **low**.
 
 **R21. Data left on a device or in a browser.**
-- What happens: the app keeps its session and some per-account lists in the iOS Keychain, which can survive deleting the app; sign-out clears most of it, and unfinished plan drafts are kept by design (DI §11). The link site keeps a per-invitation session in `localStorage`, including the full verified number, dropped when the event starts or on "Not you? Sign out" (`links/assets/personal-flow.mjs:380-478`).
+- What happens: the app keeps its session and some per-account lists in the iOS Keychain, which can survive deleting the app; sign-out clears most of it, and unfinished plan drafts are kept by design (DI §11). The link site keeps a per-invitation session in `localStorage`, including the full verified number, dropped when the event ends or on "Not you? Sign out" (`links/assets/personal-flow.mjs:380-478`).
 - Before measures: possible × minimal = **low**.
 - Measures: disclosure in the notice and on `/delete-account` (A1, A6); the storage is strictly necessary under PECR (A20). **To build** (disclosure).
 - Residual: remote × minimal = **low**.

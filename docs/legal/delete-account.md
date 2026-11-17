@@ -91,7 +91,7 @@ Use this if:
 
 If you don't ask, we delete a web-only account ourselves once it has had no resbite for 12 months. If you asked for a code on our website but never confirmed your number, we delete the number within 30 days.
 
-If you used the website on a shared computer, you can also clear Resbite's data from that browser. The website keeps your answer session there only until the resbite starts.
+If you used the website on a shared computer, you can also clear Resbite's data from that browser. The website keeps your answer session there only until the resbite ends.
 
 ---
 
@@ -150,7 +150,7 @@ Some records stay for a limited time after your account is deleted. We keep them
 | **Resbites you hosted that have already happened**, as a blank record with no title, details or host name | So your guests' own history makes sense | 12 months after the resbite ended, or after a group's last week |
 | **The "Message deleted" placeholders** in chats | So other people's conversations still make sense | Until the chat's own deletion date: 90 days after a one-off's chat closes, or 12 months after a group message was sent |
 | **Records of notifications we sent other people** about something you did | To make sure notifications were delivered | 30 days after sending |
-| **Phone numbers of people you invited who don't use Resbite** | So they can still answer, until the invitation ends | Until they answer or the invitation is cancelled, and no later than 30 days after the resbite ends |
+| **Phone numbers of people you invited who don't use Resbite** | So they can answer, and change their answer, until the resbite ends | 30 days after the resbite ends, or sooner if the invitation is cancelled. An answer doesn't delete it, because the personal link lets the person change their answer until the resbite ends |
 | **Phone numbers of people removed from your resbites** | So they aren't invited back by mistake | 30 days after a one-off ends, or 90 days after a group's last week |
 | **A record of a suspension**, if your account was suspended: the reason and the dates, no longer linked to your account | So we can show a regulator what we did and why | 12 months after the deletion |
 

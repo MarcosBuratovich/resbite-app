@@ -45,7 +45,7 @@ The notes promise only what 1.0 will have. A claim marked with a build item is t
 | The chat rules at the first Send, and their wording | `mobile/src/domain/safetyCopy.ts` (`rules`) | R1 has not agreed (pack, 12.2) |
 | An unanswered invitation's card shows the announcement; a connection request | Chat runbook step 6a; `mobile/src/domain/connectionsCopy.ts` | Seeded content |
 | Contacts access optional; type a number | `mobile/src/state/useContactInvites.ts` (PERM-5) | — |
-| Only picked numbers checked and stored, for that invitation only, deleted when answered or revoked or 30 days after the resbite ends; no contact database (PRV-20, guideline 5.1.1(viii)) | `mobile/src/state/useContactInvites.ts:268-286`; retention defaults (gap analysis section 5); D-23 suppression list | C3 |
+| Only picked numbers checked and stored, for that invitation only, kept until 30 days after the resbite ends or until revoked; no contact database (PRV-20, guideline 5.1.1(viii)) | `mobile/src/state/useContactInvites.ts:268-286`; retention defaults (gap analysis section 5); D-23 suppression list | C3 |
 | Invitations sent from your own messaging app | `mobile/src/services/inviteSend.ts` (PERM-4) | — |
 | The blocked-terms filter checks messages, announcements, titles, descriptions, notes and names | `supabase/migrations/20261111160000_chat_safety.sql:999,1057` for messages and announcements | C7 for the rest |
 | Report and Block, in each place listed | Chat runbook's notes and step 7 ("Chat safety (plan 3)"); `mobile/src/domain/safetyCopy.ts` | Device check on the build |
@@ -70,12 +70,12 @@ The notes promise only what 1.0 will have. A claim marked with a build item is t
 Resbite is an iPhone app for planning small get-togethers, called resbites. A host picks a time and place and invites friends by phone number; guests answer Going, Maybe or Can't go, and everyone on a resbite can chat. A resbite that repeats weekly is a group, whose chat stays open. For adults (18+). No purchases, subscriptions, ads or tracking. Run by Resbite Ltd, England and Wales.
 
 SIGN IN
-Use the account in Sign-In Information: on the first screen tap "I have an account", then "Use email and password". No code is asked. Please don't use "Get started": every account needs a mobile number verified by text, because friends invite each other by number and invitations are matched to it. Both review accounts already have one.
+Use the account in Sign-In Information: on the first screen tap "I have an account", then "Use email and password". No code is asked. Please don't use "Get started": every account needs a mobile number verified by text, because friends invite each other by number and invitations are matched to it. Both review accounts already have one. A new Apple or Google sign-in also needs a UK mobile number, so please use the review accounts. Every account can delete itself from Add your number, the Terms screen and Profile > Data & privacy.
 
 WHAT TO OPEN
 On My resbites, open [[OWNER: title of the weekly group — proposed: "Thursday board games"]]. Its chat is always open: on its page tap Group chat to see the host's messages and announcement. The chat rules appear at the review account's first Send.
 The account is also invited, not yet answered, to [[OWNER: title of the one-off — proposed: "Picnic in the park"]]; its card shows the host's announcement. Profile > Connections holds a request from the host.
-You can create a resbite from Create. Contacts access is optional; you can type a number. Only the numbers you pick are checked and stored, for that invitation only, and deleted once answered or revoked, or 30 days after the resbite ends. We build no contact database. Invitations are sent from your own messaging app.
+You can create a resbite from Create. Contacts access is optional; you can type a number. Only the numbers you pick are checked and stored, for that invitation only, and kept until 30 days after the resbite ends, or until the invitation is withdrawn. We build no contact database. Invitations are sent from your own messaging app.
 
 SAFETY
 Chat rules: "Be kind. No harassment, hate, threats or spam. Messages that break these rules are removed, and people who break them can lose their account." A blocked-terms filter checks messages, announcements, titles, descriptions, notes and names.

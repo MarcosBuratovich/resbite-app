@@ -265,6 +265,16 @@ Every account can delete itself in the app: Profile → Data & privacy → Delet
 - **Run the deletion** for that account with the owner-run deletion script, `supabase/ops/delete-account.sql`, which runs the same lifecycle as the in-app request, with the cancellations and the receipt, for banned, web-only and under-18 accounts that cannot use the app (ruling AS-R3) **[needs C2 live]**. Never delete the user from the Auth dashboard instead: it skips the cancellation pushes, the photo and cover removal, the Apple token revocation and the receipt. On the hosted schema today it also fails where the account still has guest rows (`public.attendees.user_id` has no `on delete` rule until the deletion release changes it, `supabase/migrations/20260918001316_account_deletion_lifecycle.sql:22-23`, local-only).
 - **Confirm** when it is done (template R7). The promise is **within 30 days**; the target is minutes.
 
+### 8.2a Weekly check for stuck deletions
+
+Until the deletion worker's failure and queue-age alerts exist (F10, Step 28 of `qa/app-store-release/README.md`), the owner runs this every week in the SQL editor. The promise to people is within 30 days, and nothing else tells us when the worker has stopped.
+
+```sql
+select count(*) filter (where status in ('queued','processing') and requested_at < now() - interval '7 days') as stuck, max(attempts) filter (where status in ('queued','processing')) as max_attempts from private.account_deletion_jobs;
+```
+
+Expect `stuck` 0. Held jobs are left out on purpose. If `stuck` is more than 0, or `max_attempts` keeps rising, look at the `cleanup-account` function's logs and its last runs in `cron.job_run_details`, and fix the cause before day 30 of the oldest request. Record the check and its result in the request log. Never write an account id or number in it.
+
 ### 8.3 What a deletion removes, and what stays
 
 **Removed** when the deletion is requested (`request_account_deletion`, `supabase/migrations/20261116120000_open_beta.sql:202-276`, carried into C2): the profile becomes "Deleted member" with no photo; future resbites the person hosts are cancelled, with a push to guests; on every resbite they host the meeting place is cleared, and the redaction trigger blanks the title, description, cover, note to guests, meeting details and area (`supabase/migrations/20261021120000_gi1_event_links.sql:188-203`); their guest rows, connections and refusals, blocks both ways, their id on the reports they filed (the reports stay, ruling AS-R2), chat rules acceptances, moderator row, read positions, mutes, push registrations and queued notifications; their messages lose their words and author. Then the clean-up worker removes their photos and covers and the Auth account itself **[needs C2]**. Sign in with Apple tokens are revoked **[needs B3, C2]**.

@@ -80,6 +80,7 @@ A change to the Terms, of any size, also needs a new `TERMS_VERSION`, so that pe
 | 17 November 2026 | This index | 1.0 | First version | — |
 | 17 November 2026 | All of the above | 1.0 (draft) | Cross-check before solicitor review: one name for A1 and the regulator; one effective-date placeholder; what deletion does to a host's resbites, the guest list, suspension records, legal-request address and the ban for child sexual abuse made the same everywhere | Not published |
 | 17 November 2026 | All of the above | 1.0 (draft) | The owner's answers and the rulings (AS-D1 to AS-D8, AS-R1 to AS-R9): A1 named "Privacy Policy" everywhere; Twilio named as the SMS provider; a named backup moderator; reports outlive their reporter's account; the suspension record keeps only the reason and dates after deletion; web-only accounts deleted after 12 months without a resbite; the intimate image uploader suspended at once; legal requests to privacy@resbite.com; weekly-group chat history disclosed; the report thanks gives the review time; the questions for the solicitor listed below | Not published |
+| 17 November 2026 | Privacy Policy; Delete your account; in-app Data & privacy | 1.0 (draft) | Final review: an invited non-user's number is kept until 30 days after the resbite ends, answered or not; the link site's answer session ends when the resbite ends; a replaced photo goes about 7 days later | Not published |
 
 ## Questions for the solicitor
 
@@ -96,6 +97,9 @@ The owner has confirmed that a UK solicitor reviews the public documents before 
 7. **Apple, Google and Apple's push service (APNs) as independent controllers.** Confirm the roles, which are inferred and UNVERIFIED (LAW-9), especially for APNs, which carries push text that Expo passes to it. (`privacy-notice.md` section 5.3; `docs/compliance/vendors.md`, Apple and Google; `docs/compliance/records-of-processing.md` sections 9 and 10.)
 8. **No prior consultation with the ICO** (Article 36). Confirm that no residual risk in the DPIA is high, and that our reading of guideline 5.1.1(viii) for stored invitations and removal records is sound. (`docs/compliance/dpia.md` section 7.)
 9. **Proof of age.** Whether, and how, Resbite may check the age of a person who disputes an under-18 finding without keeping identity documents, and the thresholds in the children's access assessment. (`docs/compliance/childrens-access-assessment.md` section 9.)
+
+9a. **Invitation numbers after an answer.** The code keeps a non-user's number until 30 days after the resbite ends, even after they answer, because the personal link lets them change their answer until then. The Privacy Policy, the deletion page, the in-app Data & privacy page and the App Review notes now say so. Is that reading of "until answered or revoked" (D-8) sound, or must an answered invitation's number go at once? (`privacy-notice.md` sections 7 and 10; `delete-account.md`; `docs/compliance/retention-schedule.md` code note; AS-P6-2.)
+9b. **A series hold and other people's deletions.** A hold on a resbite series does not stop another person deleting their own account, and so their records in that series; only a hold on that person does (ASR2-4). Should a series hold also pause other people's deletions, given UK GDPR Art. 17(3)(e) (legal claims)? (`docs/compliance/law-enforcement-requests.md` section 11; `docs/compliance/retention-schedule.md` section 14.)
 
 **Online safety**
 
@@ -118,3 +122,7 @@ The owner has confirmed that a UK solicitor reviews the public documents before 
 **Names**
 
 22. **The regulator's name.** The documents say "the Information Commission (ICO)", which took over from the Information Commissioner's Office on 30 September 2026 and still uses the name ICO. Confirm the form to use. (`terms-of-use.md`, open point 11; `docs/compliance/dpia.md` section 7.)
+
+## Questions for the owner
+
+1. **A held person who deletes their account.** Today their name, photo, places and chat messages stay visible to other people until the hold is lifted (the retention schedule says so). Should a held deletion hide and preserve them instead? That needs a new hidden marker on the profile, read by chat names, photos, guest lists and chat rows, and it must not set the deletion date, which would fire the plan redaction. (`docs/compliance/retention-schedule.md` section 14; `supabase/migrations/20261117110000_account_deletion_release.sql`.)

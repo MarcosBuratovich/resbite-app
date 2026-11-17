@@ -180,12 +180,14 @@ It records the hold in `private.legal_holds` and prints it. `supabase/ops/legal-
 
 ### 11.3 What it stops at 1.0
 
-- **Account deletion.** The deletion request is still accepted and the account loses access at once, but erasure of the held records waits until the hold is lifted **[needs C2]**.
+- **Account deletion of a held person.** The deletion request is still accepted and the account loses access at once, but erasure of the held records waits until the hold is lifted **[needs C2]**. Only a hold on that account does this. A hold on a series does not stop another person's own deletion (decision ASR2-4): if the case needs a person's records, set a hold on that person too.
 - **The retention jobs** for the held records: chat messages, plans and guest rows, join requests, invitations and removal records, notifications, connection refusals, closed reports, suspension records, deletion receipts, and the photo and cover clean-up, including the 7-day orphan photo clean-up **[needs C3]**.
 - **Team removals.** The removal scripts take content down from view in "hide and preserve" mode instead of deleting the file **[needs C6]**.
 
 ### 11.4 What it does not stop
 
+- **A series hold and other people's deletions.** A person who is not held can still delete their own account, and their guest rows, messages and photos in a held series go with it. Set a hold on the account as well when the case needs it.
+- **A held web account folded into an app account.** A web account under a hold cannot be folded into an app account: the fold is refused until the hold is lifted.
 - `supabase/ops/purge-closed-reports.sql`, run by hand, does not know about holds. Do not run it while a hold covers a closed report. The C3 job that replaces it respects holds **[needs C3]**.
 - A user deleting their own message, or a host removing one: the words go. A report about that message keeps its frozen copy.
 - `supabase/ops/remove-reported-message.sql` blanks the message's words; the report's frozen copy remains.

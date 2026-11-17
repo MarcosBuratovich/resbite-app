@@ -266,7 +266,7 @@ The full schedule, with triggers, jobs and the legal-hold rule, is `retention-sc
 |---|---|
 | Account, profile, the 18+ and Terms record, app sessions, blocks | While the account exists (blocks until undone) |
 | Account deletion | Started in the app; completed within 30 days (aiming for minutes) **[needs B3, C2]** |
-| Non-users' numbers for invitations | Until answered or revoked, or 30 days after the resbite ends, whichever comes first **[needs C3]** |
+| Non-users' numbers for invitations | Until 30 days after the resbite ends, or sooner if revoked; an answer does not delete it **[needs C3]** |
 | Numbers in removal records | 30 days after a one-off ends; 90 days after a series' last occurrence **[needs C3]** |
 | Objection suppression list | Until the person withdraws the objection **[needs C3]** |
 | Chat messages | 90 days after a one-off's chat closes; in a group, messages older than 12 months **[needs C3]** |
