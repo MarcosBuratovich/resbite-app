@@ -8,6 +8,17 @@
 -- private.series_held(uuid) is dropped only when its comment reads 'resbite 20261117130000': made by this file, not by
 -- plan 2's, which runs first and so normally owns all but series_held.
 
+-- Section 2: the daily run and the row purges.
+drop function if exists private.run_retention();
+drop function if exists private.purge_suspension_history(integer);
+drop function if exists private.purge_closed_reports(integer);
+drop function if exists private.purge_link_opens(integer);
+drop function if exists private.purge_notifications(integer);
+drop function if exists private.purge_connection_requests(integer);
+drop function if exists private.purge_connection_refusals(integer);
+drop function if exists private.purge_plan_removals(integer);
+drop function if exists private.purge_phone_invitations(integer);
+
 -- Section 1: the retention helpers, then the shared objects this file made.
 drop function if exists private.series_end(uuid);
 drop function if exists private.series_under_hold(uuid);
