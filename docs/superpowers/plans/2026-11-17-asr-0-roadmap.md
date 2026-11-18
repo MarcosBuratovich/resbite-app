@@ -4,7 +4,17 @@
 
 **Sources.** The gap analysis `docs/superpowers/specs/2026-11-17-app-store-readiness-design.md` (sections 2, 4, 5 and 6); the owner's answers and rulings in `knowledge-base/08-decisions.md`, section "App Store readiness (AS), 17 November 2026" (AS-D1 to AS-D8, AS-R1 to AS-R9), which win where they differ; the release runbook `qa/app-store-release/README.md` (steps 11 to 30); the documents in `docs/legal/` and `docs/compliance/`.
 
-**Status on 17 November 2026.** Nothing in the plans is built or applied. The plans, this roadmap and the documents updated to rulings AS-D1 to AS-R9 are committed on `app-store-readiness`, so the precondition "the documents are committed" (hard dependency 8) is met.
+**Status at the end of 17 November 2026.** Everything in plans 1 to 6 is built, reviewed and merged on `app-store-readiness`, except plan 1's CAPTCHA (Tasks 7 to 9). Those wait for the owner to choose Turnstile or hCaptcha (AS-D5). Nothing is applied to the hosted project, deployed or released. A final whole-branch review followed: its findings, what each became and the owner's open decisions are in `qa/app-store-release/final-review-2026-11-17.md`. Checks on the merged branch:
+
+- SQL full suite: 73 pass.
+- Hosted baseline with the six migrations in order: 38 pass.
+- Edge shared tests: 143 pass.
+- `npm run check`: 1,341 pass.
+- Every app and link-site browser check: 30 of 30.
+
+The next steps are the owner's: the hosted sittings in section 5, starting with H1 (Twilio, then test mode off, which is urgent), and the owner's work in section 6.
+
+Earlier (stage 3): the plans, this roadmap and the documents updated to rulings AS-D1 to AS-R9 were committed, which met the precondition "the documents are committed" (hard dependency 8).
 
 ## House rules every plan carries
 
