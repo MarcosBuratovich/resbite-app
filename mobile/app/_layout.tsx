@@ -129,12 +129,15 @@ function Navigation() {
           <Stack.Screen name="introduction" />
           <Stack.Screen name="invite" />
           <Stack.Screen name="delete-account" />
+          <Stack.Screen name="licences" />
+          <Stack.Screen name="about-legal" />
           <Stack.Screen name="kit" />
           <Stack.Protected guard={Boolean(session)}>
             <Stack.Screen name="account" />
-            <Stack.Screen name="account-details" />
             <Stack.Screen name="about-you" />
             <Stack.Screen name="add-phone" />
+            {/* Plan 4: the current Terms of Use, accepted once, after Add your number and before About you. */}
+            <Stack.Screen name="accept-terms" />
             {/* Plan 3: an open link's request, reachable while the account still waits for access. */}
             <Stack.Screen name="waiting" />
           </Stack.Protected>

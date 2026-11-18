@@ -9,7 +9,8 @@
 # instead of on the plan after the message: no deadlock (40P01), and both go through.
 # (2) A fold and the deletion of the person who brought the folded account and reported it. A session holds the web
 # account's phone invitation, so the fold waits there holding its guest row; the deletion then waits on that guest row
-# (its brought_by), and only after it deletes the reports it filed, as the fold re-points them: no deadlock.
+# (its brought_by), and only after it clears its name on the reports it filed (AS-R2), as the fold re-points them: no
+# deadlock.
 # (2b) A fold and the deletion of the person who blocked and reported the folded account, with no guest row in common
 # (ruling SR5). A session holds a notice to the web account, so the fold waits at its profile's delete, which cascades
 # to that notice before the blocks; the deletion then waits on the block. The fold takes the web account's block rows
@@ -390,6 +391,8 @@ delete from public.plans where id::text like 'e8100000-%';
 delete from public.chats where series_id::text like 'e8100000-%';
 delete from private.account_deletion_jobs where user_id::text like 'e8000000-%';
 delete from realtime.messages where topic like 'chat:e8100000-%';
+-- The reports a deleted account filed stay, without its name (AS-R2), so they don't go with the Auth users.
+delete from private.reports where plan_id::text like 'e8100000-%';
 delete from auth.users where id::text like 'e8000000-%';
 do $$ begin
  if exists(select 1 from public.profiles where id::text like 'e8000000-%') or exists(select 1 from private.reports where plan_id::text like 'e8100000-%')

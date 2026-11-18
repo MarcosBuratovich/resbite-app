@@ -19,3 +19,7 @@ test("Invite people names its phone contacts apart from the connections, and the
   assert.equal(INVITE_COPY.eventLinkHint, "Anyone who answers through the link waits for your approval.");
   assert.equal("linkInfoLine" in INVITE_COPY, false, "the old hint is gone");
 });
+
+test("a number that can't be invited by link says so with a curly apostrophe", () => {
+  assert.equal(INVITE_COPY.cannotInvite, "Can’t be invited by link");
+});

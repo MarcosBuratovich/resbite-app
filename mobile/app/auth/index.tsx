@@ -5,10 +5,9 @@ import { Eye, EyeOff, Info, KeyRound, Mail, MailCheck, RefreshCw, Send } from "l
 import { Button, Copy, ErrorNote, TextAction, s } from "../../src/design/ui";
 import { Chip, FieldCard, IconButton, InfoSheet, StatusCard, StepScreen, useFocusOnChange } from "../../src/design/kit";
 import { colors as c, fonts } from "../../src/design/tokens";
-import { RegistrationDetails } from "../../src/design/RegistrationDetails";
-import { AppleMark } from "../../src/design/AppleMark";
+import { LegalLinks } from "../../src/design/LegalLinks";
+import { AppleButton } from "../../src/design/AppleButton";
 import { authTitle } from "../../src/domain/accountCopy";
-import { skipOptionalDetails } from "../../src/domain/registration";
 import { useAuthFlow } from "../../src/state/useAuthFlow";
 import { appleSignInAvailable } from "../../src/services/appleSignIn";
 
@@ -18,7 +17,7 @@ import { appleSignInAvailable } from "../../src/services/appleSignIn";
  */
 export default function Auth() {
   const {
-    mode, step, setStep, details, setDetails, confirmedEmail, setConfirmedEmail,
+    mode, confirmedEmail, setConfirmedEmail,
     showPassword, setShowPassword, email, setEmail, password, setPassword,
     busy, restoring, blocked, error, setError, notice, setNotice, pending, remaining, scroll,
     submit, checkConfirmed, switchMode, forgetDestination, google, apple,
@@ -37,7 +36,7 @@ export default function Auth() {
   }, []);
   const [direction, setDirection] = useState<"forward" | "back">("forward");
   const heading = useRef<Text>(null);
-  const title = authTitle(mode, step, confirmedEmail);
+  const title = authTitle(mode, 0, confirmedEmail);
   // VoiceOver focus moves to each new heading: a mode switch, a sign-up step, "Check your inbox".
   useFocusOnChange(heading, title);
   const register = mode === "register";
@@ -68,73 +67,33 @@ export default function Auth() {
             ? "Send reset link"
             : mode === "confirm"
               ? "Resend confirmation email"
-              : register
-                ? step < 2
-                  ? "Next"
-                  : "Create account"
-                : "Sign in"
+              : "Sign in"
         }
         onPress={() => {
           forward();
           void submit();
         }}
         loading={busy}
-        disabled={restoring || ((mode === "reset" || mode === "confirm" || (register && step === 2)) && remaining > 0)}
+        disabled={restoring || ((mode === "reset" || mode === "confirm") && remaining > 0)}
       />
     );
   const status =
     remaining > 0 && (mode === "reset" || (mode === "confirm" && !confirmedEmail))
       ? `You can request another email in ${remaining}s.`
-      : register && step === 2 && remaining > 0
-        ? `You can request another email in ${remaining}s. Check your inbox first if you already tried to create this account.`
-        : undefined;
+      : undefined;
   return (
     <StepScreen
-      step={register ? step + 1 : null}
-      total={3}
+      step={null}
       title={title}
       titleRef={heading}
       scrollRef={scroll}
       direction={direction}
-      onBack={
-        register && step > 0
-          ? () => {
-              if (blocked) return;
-              setDirection("back");
-              setStep(step - 1);
-              setError(null);
-            }
-          : undefined
-      }
       onClose={() => (router.canGoBack() ? router.back() : router.replace("/"))}
       header={<IconButton icon={Info} label="About access" tone="plain" onPress={() => setAbout(true)} />}
       primary={primary}
       status={status}
     >
-      {register && step < 2 && (
-        <RegistrationDetails
-          value={details}
-          onChange={(value) => {
-            setDetails(value);
-            setError(null);
-          }}
-          step={step}
-        />
-      )}
-      {register && step === 1 && (
-        <Chip
-          text="Skip"
-          label="Skip"
-          disabled={blocked}
-          onPress={() => {
-            forward();
-            setDetails(skipOptionalDetails(details));
-            setError(null);
-            setStep(2);
-          }}
-        />
-      )}
-      {(!register || step === 2) && !confirmedEmail && (
+      {!confirmedEmail && (
         <>
           <FieldCard
             label="Email address"
@@ -151,7 +110,7 @@ export default function Auth() {
               setNotice("");
             }}
           />
-          {(register || mode === "login") && (
+          {mode === "login" && (
             <FieldCard
               label="Password"
               placeholder="Password"
@@ -159,7 +118,7 @@ export default function Auth() {
               secureTextEntry={!showPassword}
               autoCorrect={false}
               autoCapitalize="none"
-              autoComplete={register ? "new-password" : "current-password"}
+              autoComplete="current-password"
               value={password}
               editable={!blocked}
               onChangeText={setPassword}
@@ -173,11 +132,6 @@ export default function Auth() {
                 />
               }
             />
-          )}
-          {register && (
-            <Copy style={styles.small}>
-              Use at least 8 characters. After confirming your email, you can add an optional profile photo.
-            </Copy>
           )}
         </>
       )}
@@ -220,9 +174,9 @@ export default function Auth() {
           />
         </View>
       )}
-      {(mode === "login" || (register && step === 2)) && (
+      {mode === "login" && (
         <>
-          {appleAvailable && <Chip text="Continue with Apple" icon={AppleMark} onPress={apple} disabled={blocked} />}
+          {appleAvailable && <AppleButton onPress={apple} disabled={blocked} />}
           <Chip text="Continue with Google" onPress={google} disabled={blocked} />
         </>
       )}
@@ -244,7 +198,7 @@ export default function Auth() {
             />
           </>
         )}
-        {(register || mode === "confirm") && (
+        {mode === "confirm" && (
           <TextAction title="I have an account" disabled={blocked} onPress={() => go("login")} />
         )}
         {mode === "reset" && (
@@ -254,8 +208,9 @@ export default function Auth() {
           </>
         )}
       </View>
+      <LegalLinks align="start" />
       <InfoSheet visible={about} title="About access" onClose={() => setAbout(false)}>
-        <Copy>Private Resbite test · access is opened by invitation.</Copy>
+        <Copy>Resbite is for people aged 18 and over. Every account needs a mobile number, confirmed with a code we text you.</Copy>
       </InfoSheet>
     </StepScreen>
   );

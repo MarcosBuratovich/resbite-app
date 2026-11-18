@@ -1,7 +1,17 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { PHONE_CODE_COPY, sendPhoneCode, verifyPhoneCode, type AuthError, type PhoneCodeDeps } from "./phoneCode";
-import { PHONE_COPY } from "../domain/phoneCopy";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import {
+  HOOK_SMS_COPY,
+  PHONE_CODE_COPY,
+  phoneCodeDeps,
+  sendPhoneCode,
+  verifyPhoneCode,
+  type AuthError,
+  type PhoneCodeDeps,
+} from "./phoneCode";
+import { PHONE_COPY, takenLine } from "../domain/phoneCopy";
 
 const phone = "+447700900834";
 const wait = "Wait a minute, then send a new code.";
@@ -9,22 +19,16 @@ const connection = "Check your connection and try again.";
 const mismatch = "That code doesn’t match. Try again.";
 const expired = "That code has expired. Send a new one.";
 
-function harness(o: { otp?: AuthError; verify?: AuthError; exchange?: string | null | "throw"; now?: number } = {}) {
+function harness(o: { otp?: AuthError; verify?: AuthError; now?: number } = {}) {
   const calls = {
     signInWithOtp: [] as Parameters<PhoneCodeDeps["signInWithOtp"]>[0][],
     updatePhone: [] as string[],
     verifyOtp: [] as Parameters<PhoneCodeDeps["verifyOtp"]>[0][],
-    exchange: [] as [string, string][],
   };
   const d: PhoneCodeDeps = {
     signInWithOtp: async (a) => (calls.signInWithOtp.push(a), { error: o.otp ?? null }),
     updatePhone: async (p) => (calls.updatePhone.push(p), { error: o.otp ?? null }),
     verifyOtp: async (a) => (calls.verifyOtp.push(a), { error: o.verify ?? null }),
-    exchangeTestCode: async (p, c) => {
-      calls.exchange.push([p, c]);
-      if (o.exchange === "throw") throw new Error("offline");
-      return o.exchange ?? null;
-    },
     now: () => o.now ?? 1_000,
   };
   return { d, calls };
@@ -63,31 +67,68 @@ test("send errors map to copy and reasons", async () => {
   assert.deepEqual(await sendPhoneCode(harness({ otp: { message: "x", status: 0 } }).d, phone, "signup"), { ok: false, message: connection });
 });
 
-test("test mode swaps 000000 for the stored code", async () => {
-  const h = harness({ exchange: "123456" });
-  assert.deepEqual(await verifyPhoneCode(h.d, phone, "000000", 1_000, "signin"), { ok: true });
-  assert.deepEqual(h.calls.verifyOtp, [{ phone, token: "123456", type: "sms" }]);
-  const a = harness({ exchange: "123456" });
-  await verifyPhoneCode(a.d, phone, "000000", 1_000, "add");
-  assert.equal(a.calls.verifyOtp[0].type, "phone_change");
+test("the taken-number line gives the support address when the build has one (B6)", () => {
+  assert.equal(
+    takenLine("support@resbite.com"),
+    "This number already belongs to another Resbite account. Use a different number, or write to support@resbite.com.",
+  );
+  assert.equal(
+    takenLine(null),
+    "This number already belongs to another Resbite account. Use a different number, or ask the Resbite team for help.",
+  );
 });
 
-test("live mode verifies 000000 as typed and a wrong code clears", async () => {
-  const h = harness({ exchange: null, verify: { message: "invalid", status: 403 } });
+test("000000 is checked as typed, like any other code", async () => {
+  const h = harness({ verify: { message: "invalid", status: 403 } });
   assert.deepEqual(await verifyPhoneCode(h.d, phone, "000000", 1_000, "signup"), { ok: false, message: mismatch, clear: true });
-  assert.equal(h.calls.verifyOtp[0].token, "000000");
+  assert.deepEqual(h.calls.verifyOtp, [{ phone, token: "000000", type: "sms" }]);
 });
 
-test("other codes never touch the exchange", async () => {
-  const h = harness();
-  await verifyPhoneCode(h.d, phone, "654321", 1_000, "signup");
-  assert.deepEqual(h.calls.exchange, []);
+test("nothing can swap a code any more", () => {
+  assert.deepEqual(Object.keys(harness().d).sort(), ["now", "signInWithOtp", "updatePhone", "verifyOtp"]);
+  assert.equal("exchangeTestCode" in phoneCodeDeps, false);
 });
 
-test("a thrown exchange is a connection failure", async () => {
-  const h = harness({ exchange: "throw" });
-  assert.deepEqual(await verifyPhoneCode(h.d, phone, "000000", 1_000, "signup"), { ok: false, message: connection, clear: false });
-  assert.deepEqual(h.calls.verifyOtp, []);
+test("a refusal from the text-message hook reaches the screen as written", async () => {
+  const words = "We can’t text this number. Check it, or use another number.";
+  assert.deepEqual(await sendPhoneCode(harness({ otp: { message: words, status: 422 } }).d, phone, "signup"), { ok: false, message: words });
+  for (const purpose of ["signup", "signin", "add"] as const)
+    assert.deepEqual(await sendPhoneCode(harness({ otp: { message: "Invalid code request.", status: 400 } }).d, phone, purpose), {
+      ok: false,
+      message: "Invalid code request.",
+    }, purpose);
+});
+
+test("the hook's words in the app are the hook's own (supabase/functions/_shared/sms-hook.ts)", () => {
+  const source = readFileSync(fileURLToPath(new URL("../../../supabase/functions/_shared/sms-hook.ts", import.meta.url)), "utf8");
+  const block = /export const SMS_COPY = \{([\s\S]*?)\} as const;/.exec(source)?.[1] ?? "";
+  const words = [...block.matchAll(/:\s*"([^"]*)"/g)].map((m) => m[1]);
+  assert.equal(words.length, 3);
+  assert.deepEqual([...HOOK_SMS_COPY].sort(), words.sort());
+});
+
+// Auth's hook error codes (Supabase's Auth error-code list: hook_timeout, hook_timeout_after_retry, hook_payload_*),
+// with words like Auth's, and other Auth messages: never shown as they came. The only server words shown are the hook's.
+const AUTH_ERRORS: NonNullable<AuthError>[] = [
+  { status: 422, code: "hook_timeout", message: "Failed to reach hook within maximum time of 5.000000 seconds" },
+  { status: 422, code: "hook_timeout_after_retry", message: "Failed to reach hook after maximum retries" },
+  { status: 400, code: "hook_payload_over_size_limit", message: "Payload size exceeded" },
+  { status: 422, code: "hook_timeout", message: "We can’t text this number. Check it, or use another number." },
+  { status: 400, code: "validation_failed", message: "Invalid phone number format (E.164 required)" },
+  { status: 422, code: "sms_send_failed", message: "Error sending confirmation OTP to provider: x" },
+  { status: 400, message: "Unsupported phone provider" },
+  { status: 422, message: "" },
+];
+
+test("a hook timeout or any other Auth message reads as the connection copy, for every purpose", async () => {
+  for (const purpose of ["signup", "signin", "add"] as const)
+    for (const otp of AUTH_ERRORS)
+      assert.deepEqual(await sendPhoneCode(harness({ otp }).d, phone, purpose), { ok: false, message: connection }, `${purpose} ${otp.code}`);
+});
+
+test("the hook's own busy answer (Auth's 503) reads as the connection copy", async () => {
+  const otp = { status: 503, message: "Text messages aren’t available right now. Try again later." };
+  assert.deepEqual(await sendPhoneCode(harness({ otp }).d, phone, "signin"), { ok: false, message: connection });
 });
 
 test("a bad code after ten minutes reads as expired", async () => {
@@ -99,5 +140,4 @@ test("a short code is a mismatch without any call", async () => {
   const h = harness();
   assert.deepEqual(await verifyPhoneCode(h.d, phone, "12345", 1_000, "signin"), { ok: false, message: mismatch, clear: true });
   assert.deepEqual(h.calls.verifyOtp, []);
-  assert.deepEqual(h.calls.exchange, []);
 });

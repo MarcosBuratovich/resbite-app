@@ -1,7 +1,11 @@
 // GI2's guest account words and rules that outlive its email-code screen (retired in plan 3): the 18+ tick,
 // Apple and Google, the code countdown, names from a session, and an event link's closed states.
 
-export const TERMS_VERSION = "2026-10";
+/**
+ * The Terms of Use version a sign-up or invitation tick records when the server reports none (plan 4): version 1.0
+ * of the Terms. The link site's fallback and supabase/ops/publish-terms-version.sql use the same value.
+ */
+export const TERMS_VERSION = "2026-12";
 
 /** "1:00", "0:59", "0:05"; never negative. */
 export function formatCountdown(seconds: number): string {
@@ -10,8 +14,12 @@ export function formatCountdown(seconds: number): string {
 }
 
 export const GUEST_COPY = {
-  tick: "I’m 18 or over",
-  terms: "I agree to the Terms and Privacy Policy.",
+  /** One tick for both facts (community-rules-short.md section 2): the age and the Terms of Use. */
+  tick: "I’m 18 or over and I accept the Terms of Use.",
+  /** The line under the tick, outside the checkbox, so VoiceOver can reach its two links (TermsLine). */
+  terms: "Read the Terms of Use. Our Privacy Policy explains how we use your data.",
+  /** The tick's VoiceOver hint. */
+  tickHint: "Confirms you’re 18 or over and accept the Terms of Use.",
   ageHelper: "Resbite is for people aged 18 and over.",
   apple: "Continue with Apple",
   google: "Continue with Google",

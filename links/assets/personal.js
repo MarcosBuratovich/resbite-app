@@ -2,7 +2,7 @@
 // direction A): confirm the invited number behind the 18+ tick, the code, the answer and the get-the-app screen.
 // It talks to Supabase Auth and REST directly with the publishable key (the CSP allows only that host) and keeps the
 // session in this origin's storage, one entry per invitation code with the full number verified for it, until the
-// event starts, so the same browser sees its answer again. "Not you? Sign out" ends it. Words and step logic:
+// event ends, so the same browser sees its answer again. "Not you? Sign out" ends it. Words and step logic:
 // personal-flow.mjs.
 // The open link /r/<code> runs it in open mode (data-mode="open"; open-link approval, plan 3): any number can answer,
 // so nothing is checked against an invited number; the answer goes to request_to_join and waits for the host, and the
@@ -15,11 +15,12 @@ import {
   endingOf,
   errorText,
   initialState,
-  isTestCode,
   keptEntry,
   maskNumber,
   needsName,
   next,
+  linkedParts,
+  numberNotice,
   openDoneScreen,
   readKept,
   regionForCallingCode,
@@ -66,6 +67,13 @@ function pageStorage() {
 /** Only https addresses become links; an unset or odd one leaves plain words. */
 const httpsUrl = (value) => (/^https:\/\/[^\s"'<>]+$/.test(value ?? "") ? value : "");
 
+/** A part of a line: plain text, an https link (new tab) or a mailto link, the label in <strong> when marked. */
+function linkNode(part) {
+  if (!part.href) return part.strong ? h("strong", { text: part.text }) : part.text;
+  const external = part.href.startsWith("https:");
+  return h("a", { href: part.href, ...(external ? { target: "_blank", rel: "noopener noreferrer" } : {}), text: part.text });
+}
+
 function start(main, answerButton) {
   const data = main.dataset;
   const base = (data.supabaseUrl || "").replace(/\/+$/, "");
@@ -104,10 +112,7 @@ function start(main, answerButton) {
   const confirmHeading = h("h1", { tabindex: "-1", text: C.confirmHeading });
   const tick = h("input", { type: "checkbox", id: "tick", "aria-describedby": "terms-line", onchange: () => dispatch({ type: "tick", ticked: tick.checked }) });
   const terms = h("p", { id: "terms-line", class: "terms" });
-  for (const part of C.terms.split(/(Terms|Privacy Policy)/)) {
-    const url = part === "Terms" ? termsUrl : part === "Privacy Policy" ? privacyUrl : "";
-    terms.append(url ? h("a", { href: url, target: "_blank", rel: "noopener noreferrer", text: part }) : part);
-  }
+  for (const part of linkedParts(C.terms, { "Terms of Use": termsUrl, Terms: termsUrl, "Privacy Policy": privacyUrl })) terms.append(linkNode(part));
   const ageHelper = h("p", { id: "age-helper", class: "helper", text: C.ageHelper });
   // The country the number is read with: the invitation's calling code, or for the open link the browser's region
   // (the first of its languages that names one).
@@ -126,7 +131,7 @@ function start(main, answerButton) {
     type: "tel",
     inputmode: "tel",
     autocomplete: "tel",
-    "aria-describedby": "confirm-error",
+    "aria-describedby": data.notice === "on" ? "confirm-error number-notice" : "confirm-error",
     // A number typed with + names its own country: the dropdown follows it.
     oninput: () => {
       const value = number.value.trim();
@@ -141,6 +146,14 @@ function start(main, answerButton) {
   });
   const confirmError = h("p", { id: "confirm-error", class: "error" });
   const sendButton = h("button", { type: "submit", class: "button", text: C.send });
+  // The invitee notice (legal pages, plan 5): between the number and Send code, visible before anything is typed.
+  // On /i/ the right to object stands apart in its own paragraph (UK GDPR Article 21(4)).
+  let numberNoticeBlock = null;
+  if (data.notice === "on") {
+    const { notice, objection } = numberNotice({ open, who: open ? host : inviter, privacyUrl });
+    numberNoticeBlock = h("div", { class: "number-notice" }, h("p", { id: "number-notice", class: "privacy-note" }, ...notice.map(linkNode)));
+    if (objection) numberNoticeBlock.append(h("p", { class: "privacy-note objection" }, ...objection.map(linkNode)));
+  }
   const confirmForm = h(
     "form",
     { novalidate: true, onsubmit: onSend },
@@ -149,6 +162,7 @@ function start(main, answerButton) {
     h("div", { class: "field" }, h("label", { for: "country", text: C.countryLabel }), countrySelect),
     h("div", { class: "field" }, h("label", { for: "number", text: C.numberField }), number),
     confirmError,
+    numberNoticeBlock,
     sendButton,
   );
   sections.confirm.append(confirmHeading, h("p", { class: "lead", text: open ? C.numberHint : C.confirmBody(inviter) }), confirmForm);
@@ -291,7 +305,7 @@ function start(main, answerButton) {
     nameField.hidden = !needsName(s);
     if (open) verifiedChip.textContent = C.verified(endingOf(s.phone));
     for (const radio of radios) radio.checked = radio.value === s.choice;
-    setError(answerError, s.step === "answer" ? error : "", nameInput, s.error === "nameRule");
+    setError(answerError, s.step === "answer" ? error : "", nameInput, ["nameRule", "nameNotAllowed"].includes(s.error));
 
     if (open) drawJoin(s);
     else {
@@ -349,7 +363,7 @@ function start(main, answerButton) {
 
   // ---- Supabase: Auth and REST with the publishable key; the access token once signed in. ----
   // One entry per invitation code: the session and the full number this page verified for that code. Entries whose
-  // event has started go, whatever their code; this one goes too once its event starts.
+  // event has ended go, whatever their code; this one goes too once its event ends.
   const storage = pageStorage();
   sweepKept(storage, Date.now());
   if (Number.isFinite(endsAt) && endsAt <= Date.now()) dropKept(storage, code);
@@ -440,13 +454,7 @@ function start(main, answerButton) {
       return;
     }
     const phone = state.phone;
-    let token = state.code;
-    // Test mode: the server swaps the test code for the one it stored, or returns null (then it is checked as typed).
-    if (isTestCode(token)) {
-      const swap = await api("/rest/v1/rpc/exchange_test_code", { p_phone: phone, p_code: token });
-      if (!swap.ok) return dispatch({ type: "fail", error: "connection" });
-      if (typeof swap.body === "string" && swap.body) token = swap.body;
-    }
+    const token = state.code;
     const reply = await api("/auth/v1/verify", { type: "sms", phone, token });
     const signedIn = reply.ok ? sessionFrom(reply.body, Date.now(), phone) : null;
     if (signedIn) {

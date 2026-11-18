@@ -375,22 +375,12 @@ try {
     // It repeats every week, so the sheet asks which to cancel.
     await cancelFromList(page, "Coffee together, late", "Cancel just this one");
     await expectCancelled(page, "Coffee together, late");
-    await page.getByRole("tab", { name: "Wellness", exact: true }).click();
-    await expect(page.getByText("Sample data", { exact: true })).toBeVisible();
-    await page.getByRole("button", { name: "About sample data", exact: true }).click();
-    await expect(
-      page.getByText(
-        "These are example numbers for design review. They do not track your activity or measure health.",
-        { exact: true },
-      ),
-    ).toBeVisible();
-    await page.getByRole("button", { name: "Close sheet", exact: true }).click();
-    await expect(page.getByText("30 min", { exact: true })).toBeVisible();
+    await expect(page.getByRole("tab", { name: "Wellness", exact: true })).toHaveCount(0);
     await page.getByRole("tab", { name: "Profile", exact: true }).click();
     await page.getByLabel("What should we call you?", { exact: true }).fill("Alex");
     await page.getByRole("button", { name: "Save", exact: true }).click();
     await expect(page.getByText("Preview name saved.", { exact: true })).toBeVisible();
-    console.log("PASS: preview edit, invitation block, cancel and the Wellness and Profile tabs.");
+    console.log("PASS: preview edit, invitation block, cancel, and no Wellness tab; the Profile tab.");
     await page.context().close();
   }
 

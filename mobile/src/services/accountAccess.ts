@@ -1,15 +1,28 @@
 export type AccountAccessStatus = "approved" | "unconfirmed" | "access_pending";
 
+/**
+ * The access status and the Terms of Use the server reports with it (plan 4, C8): the current published version,
+ * and whether this account has yet to accept it. A server without those keys reads as no gate.
+ */
+export type AccountAccess = {
+  status: AccountAccessStatus;
+  termsVersion: string | null;
+  termsNeeded: boolean;
+};
+
 export type AccountAccessAdapter = {
   sessionAccountId(): Promise<string | null>;
   readStatus(signal: AbortSignal): Promise<unknown>;
 };
 
-/** The response must belong to the account captured by the screen/session. */
+/**
+ * The response must belong to the account captured by the screen/session. The Terms keys count only when well
+ * formed: a version that isn't YYYY-MM, or a need that isn't `true`, asks nothing.
+ */
 export function decodeAccountAccess(
   value: unknown,
   accountId: string,
-): AccountAccessStatus {
+): AccountAccess {
   if (!accountId || !value || typeof value !== "object" || Array.isArray(value))
     throw Error("Account access could not be checked. Please try again.");
   const response = value as Record<string, unknown>;
@@ -21,7 +34,26 @@ export function decodeAccountAccess(
     response.status !== "access_pending"
   )
     throw Error("Account access could not be checked. Please try again.");
-  return response.status;
+  const termsVersion =
+    typeof response.terms_version === "string" &&
+    /^\d{4}-\d{2}$/.test(response.terms_version)
+      ? response.terms_version
+      : null;
+  return {
+    status: response.status,
+    termsVersion,
+    termsNeeded: response.terms_needed === true && termsVersion !== null,
+  };
+}
+
+/** The sign-up tick, once recorded for the server's current version, means the account has accepted it. */
+export function afterTick(
+  access: AccountAccess,
+  recorded: string | null,
+): AccountAccess {
+  return recorded !== null && recorded === access.termsVersion
+    ? { ...access, termsNeeded: false }
+    : access;
 }
 
 // Lazy imports keep the decoder and injected adapter usable in isolated tests.
@@ -50,7 +82,7 @@ export async function readAccountAccess(
     timeoutMs?: number;
   },
   adapter: AccountAccessAdapter = supabaseAccountAccessAdapter,
-): Promise<AccountAccessStatus> {
+): Promise<AccountAccess> {
   const { accountId, assertCurrent } = options;
   if (!accountId) throw Error("Sign in to check account access.");
   assertCurrent();

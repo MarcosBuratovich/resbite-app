@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { formatWhen, repeatLine, previewDescription, renderClosedPage, pageHeaders, isLinkCode, PAGE_CSP } from "./server/lib/render.mjs";
 import { readInvitationPage, signCoverUrl } from "./server/lib/supabase.mjs";
 import { renderOpenLinkPage, personalCsp } from "./server/lib/personal.mjs";
-import { pageOptions } from "./server/lib/options.mjs";
+import { pageOptions, TERMS_VERSION_FALLBACK } from "./server/lib/options.mjs";
 import page from "./server/api/page.mjs";
 import image from "./server/api/image.mjs";
 import { mkdtemp, mkdir, copyFile, readFile, rm } from "node:fs/promises";
@@ -171,9 +171,10 @@ test("the page options come from the environment, with one set of defaults for /
     appStoreId: "",
     supabaseUrl: "",
     publishableKey: "",
-    termsVersion: "2026-10",
-    termsUrl: "",
-    privacyUrl: "",
+    termsVersion: TERMS_VERSION_FALLBACK,
+    termsUrl: "https://link.resbite.com/terms",
+    privacyUrl: "https://link.resbite.com/privacy",
+    legal: true,
   });
   const env = {
     LINK_ORIGIN: "https://link.example", APP_STORE_URL: "https://testflight.apple.com/join/abc", APP_STORE_ID: "6823164725",
@@ -191,8 +192,24 @@ test("the page options come from the environment, with one set of defaults for /
     termsVersion: "2027-01",
     termsUrl: "https://www.resbite.com/terms",
     privacyUrl: "https://www.resbite.com/privacy",
+    legal: true,
   });
   assert.ok(!JSON.stringify(options).includes("sb_secret"), "never the secret key");
+});
+
+test("off mode: no legal links by default; a malformed Terms version falls back", () => {
+  const off = pageOptions(code, {}, "off");
+  assert.deepEqual([off.legal, off.termsUrl, off.privacyUrl], [false, "", ""]);
+  assert.match(TERMS_VERSION_FALLBACK, /^\d{4}-(0[1-9]|1[0-2])$/);
+  for (const bad of ["1.0", "2026-13", "2026-1", " 2027-01"]) assert.equal(pageOptions(code, { TERMS_VERSION: bad }).termsVersion, TERMS_VERSION_FALLBACK, bad);
+  assert.equal(pageOptions(code, { TERMS_VERSION: "2027-01" }).termsVersion, "2027-01");
+});
+
+test("closed pages carry the footer after main when the legal pages are live, and none otherwise", () => {
+  const html = renderClosedPage({ state: "inactive" }, { ...options, legal: true });
+  assert.ok(html.indexOf("</main>") < html.indexOf('<footer class="site-footer">') && html.indexOf('<footer class="site-footer">') < html.indexOf('<script src="/page.js">'));
+  assert.ok(html.includes('<link rel="stylesheet" href="/site.css" />') && html.includes(`content="${PAGE_CSP}"`) && !html.includes("data-"));
+  assert.ok(!renderClosedPage({ state: "inactive" }, options).includes("site-footer"));
 });
 
 test("the page function renders an open link in open mode with the /i/ CSP; closed states keep the strict CSP", async () => {
@@ -211,7 +228,7 @@ test("the page function renders an open link in open mode with the /i/ CSP; clos
   assert.equal(opened.headers["Cache-Control"], "no-store");
   assert.equal(opened.headers["Referrer-Policy"], "no-referrer");
   assert.equal(opened.headers["X-Robots-Tag"], "noindex, nofollow");
-  for (const attr of ['data-mode="open"', 'data-country="44"', 'data-publishable-key="sb_publishable_test"', 'data-supabase-url="https://example.supabase.co"', 'data-terms-version="2026-10"'])
+  for (const attr of ['data-mode="open"', 'data-country="44"', 'data-publishable-key="sb_publishable_test"', 'data-supabase-url="https://example.supabase.co"', 'data-terms-version="2026-12"'])
     assert.ok(opened.body.includes(attr), attr);
   const closed = [
     [async () => ({ state: "cancelled", host: "Stephen" }), "Stephen cancelled this resbite."],

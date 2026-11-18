@@ -6,7 +6,7 @@ export type PhotoCleanupJob = {
 };
 export type PhotoCleanupAction =
   | { action: "delete"; path: string }
-  | { action: "absent" | "account-deletion" };
+  | { action: "absent" | "account-deletion" | "held" };
 export type PhotoCleanupGateway = {
   prune: () => Promise<void>;
   claim: () => Promise<PhotoCleanupJob[]>;
@@ -28,7 +28,8 @@ export async function cleanupProfilePhotos(gateway: PhotoCleanupGateway) {
       throw Error("Invalid cleanup identity");
     try {
       const prepared = await gateway.prepare(job);
-      if (prepared.action === "account-deletion") {
+      // Account deletion owns its remaining files; a legal hold keeps the file. Neither touches Storage.
+      if (prepared.action === "account-deletion" || prepared.action === "held") {
         if (!(await gateway.finish(job, false))) throw Error("Lease changed");
         summary.deferred++;
         continue;
@@ -55,11 +56,25 @@ export async function cleanupProfilePhotos(gateway: PhotoCleanupGateway) {
   return summary;
 }
 
+/** One worker run over several stores (profile photos, then plan covers): each in order, the counts summed. */
+export async function cleanupStoredImages(gateways: readonly PhotoCleanupGateway[]) {
+  const summary = { claimed: 0, complete: 0, retry: 0, deferred: 0 };
+  for (const gateway of gateways) {
+    const part = await cleanupProfilePhotos(gateway);
+    summary.claimed += part.claimed;
+    summary.complete += part.complete;
+    summary.retry += part.retry;
+    summary.deferred += part.deferred;
+  }
+  return summary;
+}
+
 export function createPhotoCleanupHandler(
-  gateway: PhotoCleanupGateway,
+  gateway: PhotoCleanupGateway | readonly PhotoCleanupGateway[],
   enabled: boolean,
   secret: string,
 ) {
+  const gateways: readonly PhotoCleanupGateway[] = Array.isArray(gateway) ? gateway : [gateway];
   return async (request: Request): Promise<Response> => {
     const headers = { "Cache-Control": "no-store" };
     if (request.method !== "POST")
@@ -70,7 +85,7 @@ export function createPhotoCleanupHandler(
       return new Response(null, { status: 401, headers });
     // There is intentionally no caller-selected account/path or request payload.
     try {
-      return Response.json(await cleanupProfilePhotos(gateway), { headers });
+      return Response.json(await cleanupStoredImages(gateways), { headers });
     } catch {
       return Response.json({ error: "Photo cleanup unavailable" }, { status: 503, headers });
     }

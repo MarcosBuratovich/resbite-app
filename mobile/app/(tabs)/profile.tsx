@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
-import { Bell, Camera, Link2, LogOut, Pencil, ShieldCheck, Trash2, UserRound, Users } from "lucide-react-native";
+import { Bell, Camera, Link2, LogOut, Pencil, ShieldCheck, Trash2, Users } from "lucide-react-native";
 import { Button, Copy, ErrorNote, Title, s } from "../../src/design/ui";
 import { FieldCard, IconButton, InfoSheet, Row, RowGroup } from "../../src/design/kit";
 import { PreviewNotice } from "../../src/design/Chrome";
@@ -181,15 +181,6 @@ export default function Profile() {
             ink={categoryPalette.mindful.ink}
             onPress={() => router.push("/people")}
           />
-          {!p.preview && (
-            <Row
-              title="Account details"
-              icon={UserRound}
-              tint={categoryPalette.intellectual.tint}
-              ink={categoryPalette.intellectual.ink}
-              onPress={() => router.push("/account-details")}
-            />
-          )}
           <Row
             title="Notifications"
             icon={Bell}

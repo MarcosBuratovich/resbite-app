@@ -23,3 +23,10 @@ chat.sql
 chat-groups.sql
 chat-safety.sql
 open-beta.sql
+phone-test-mode-retired.sql
+account-deletion-release.sql
+terms-acceptance.sql
+safety-extension.sql
+optional-details-removal.sql
+retention.sql
+team-scripts.sql

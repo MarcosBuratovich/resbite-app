@@ -1,4 +1,15 @@
 import { GUEST_COPY } from "./guestAccount";
+import { supportAddress } from "./safetyCopy";
+
+/**
+ * The taken-number line (B6, UGC-4). While folding is off, signing in with the number would make a second account, so
+ * the way out is support, not that number (contact invitations F2): the build's support address when it has one.
+ */
+export function takenLine(address: string | null): string {
+  return address
+    ? `This number already belongs to another Resbite account. Use a different number, or write to ${address}.`
+    : "This number already belongs to another Resbite account. Use a different number, or ask the Resbite team for help.";
+}
 
 // The words of the phone screens: sign up, sign in, the code, and (Task 8) About you and Add your number.
 export const PHONE_COPY = {
@@ -28,13 +39,14 @@ export const PHONE_COPY = {
   continue: "Continue",
   addHeading: "Add your number",
   addBody: "Your friends find and invite you by your number.",
-  /** Also PHONE_CODE_COPY.taken. While folding is off, signing in with the number would make a second account, so the
-   * way out is support, not that number (contact invitations F2). */
-  taken: "This number already belongs to another Resbite account. Use a different number, or ask the Resbite team for help.",
+  addPrivacy: "We never show your number to other people on Resbite.",
+  /** Also PHONE_CODE_COPY.taken (`takenLine`). `EXPO_PUBLIC_*` is inlined when the bundle is built, and only when read
+   * with dot notation, so the line follows the build's support address. */
+  taken: takenLine(supportAddress(process.env.EXPO_PUBLIC_SUPPORT_ADDRESS)),
   /** Conditional: the app can't tell a web-only account from an app account before the function answers. */
   foldOffer: "If this number answered an invitation on the web, confirm it with a code to bring its resbites here.",
   /** The offer's own button, so the screen never has two "Send code" buttons. */
   foldSend: "Confirm with a code",
-  foldOff: "Bringing an invitation into this account isn’t switched on yet.",
+  foldOff: "Bringing an invitation into this account isn’t available right now.",
   foldGone: "That web account is gone, so we sent a code to add this number instead.",
 };

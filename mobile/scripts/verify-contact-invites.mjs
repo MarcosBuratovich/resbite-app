@@ -26,7 +26,8 @@ const CONTACTS = [ANA, BEN, CY];
 // The national significant number: what every way of writing the number has in common.
 const nsn = (p) => p.digits.slice(2);
 const TAKEN = "+447700900111";
-const STORED_CODE = "123456";
+// The code the text message carried: the only one the fixture's verify accepts.
+const SENT_CODE = "123456";
 const now = () => new Date().toISOString();
 const jwt = (sub) => {
   const exp = Math.floor(Date.now() / 1000) + 3600;
@@ -175,8 +176,7 @@ async function fixture({ user = host, width = 390, foldStatus = 200 } = {}) {
     }
     // The fold's code goes to the web-only account on TAKEN, from a client of its own: never a new account.
     if (method === "POST" && path === "/auth/v1/otp" && body?.phone === TAKEN && body.create_user === false) return reply({});
-    if (path === "/rest/v1/rpc/exchange_test_code") return reply(STORED_CODE);
-    if (method === "POST" && path === "/auth/v1/verify" && body?.phone === TAKEN && body.token === STORED_CODE && body.type === "sms")
+    if (method === "POST" && path === "/auth/v1/verify" && body?.phone === TAKEN && body.token === SENT_CODE && body.type === "sms")
       return reply({
         access_token: foreignToken,
         refresh_token: "web-fixture",
@@ -655,22 +655,18 @@ try {
     assert.deepEqual([otp[0].body.phone, otp[0].body.create_user], [TAKEN, false], "the code never creates an account");
     assert.notEqual(otp[0].headers.authorization, `Bearer ${f.appToken}`, "the code is sent without the app's session");
     await noTestCode(page, "the fold code step");
-    await page.getByLabel("6-digit code", { exact: true }).fill("000000");
+    await page.getByLabel("6-digit code", { exact: true }).fill(SENT_CODE);
     await expect(heading(page, "Create")).toBeVisible();
-    // 000000 swapped for the stored code, verified on the web account, then the fold with both tokens.
-    const [exchange] = f.calls("/rest/v1/rpc/exchange_test_code");
-    assert.deepEqual(exchange.body, { p_phone: TAKEN, p_code: "000000" });
+    // The sent code, verified as typed on the web account, then the fold with both tokens.
     const verify = f.calls("/auth/v1/verify");
     assert.equal(verify.length, 1);
-    assert.deepEqual([verify[0].body.phone, verify[0].body.token, verify[0].body.type], [TAKEN, STORED_CODE, "sms"]);
+    assert.deepEqual([verify[0].body.phone, verify[0].body.token, verify[0].body.type], [TAKEN, SENT_CODE, "sms"]);
     const fold = f.calls("/functions/v1/fold-phone-account");
     assert.equal(fold.length, 1);
     assert.equal(fold[0].headers.authorization, `Bearer ${f.appToken}`, "the fold carries the app's token");
     assert.deepEqual(fold[0].body, { foreign_token: f.foreignToken, phone: TAKEN }, "and the web account's token");
-    const order = ["/rest/v1/rpc/exchange_test_code", "/auth/v1/verify", "/functions/v1/fold-phone-account"].map((p) =>
-      f.log.findIndex((x) => x.path === p),
-    );
-    assert.ok(order[0] < order[1] && order[1] < order[2], "exchange, verify, fold");
+    const order = ["/auth/v1/verify", "/functions/v1/fold-phone-account"].map((p) => f.log.findIndex((x) => x.path === p));
+    assert.ok(order[0] >= 0 && order[0] < order[1], "verify, then fold");
     assert.deepEqual(
       f.log.filter((x) => x.method === "PUT" && x.path === "/auth/v1/user").map((x) => x.body.phone),
       [TAKEN],
@@ -683,14 +679,14 @@ try {
     await noTestCode(page, "Create after the fold");
     await f.done();
     console.log(
-      "PASS: Add your number with a taken number shows the fold offer; its code goes to the web account (create_user false, not the app's session); 000000 is swapped for the stored code; the fold posts to /functions/v1/fold-phone-account with the app's bearer token and the web account's token; the web token isn't stored; no 000000 shows.",
+      "PASS: Add your number with a taken number shows the fold offer; its code goes to the web account (create_user false, not the app's session); the code is verified as typed; the fold posts to /functions/v1/fold-phone-account with the app's bearer token and the web account's token; the web token isn't stored; no 000000 shows.",
     );
   }
   // 8. A fold the server refuses (409) shows the taken copy with its support line; one that isn't deployed (404) says
   // folding isn't switched on. Neither keeps a Retry, and nothing posts again with the spent code.
   for (const [foldStatus, words] of [
     [409, "This number already belongs to another Resbite account. Use a different number, or ask the Resbite team for help."],
-    [404, "Bringing an invitation into this account isn’t switched on yet."],
+    [404, "Bringing an invitation into this account isn’t available right now."],
   ]) {
     const phoneless = { ...host, phone: undefined, phone_confirmed_at: undefined, app_metadata: { provider: "email", providers: ["email"] } };
     const f = await fixture({ user: phoneless, foldStatus }),
@@ -701,7 +697,7 @@ try {
     await button(page, "Send code").click();
     await button(page, "Confirm with a code").click();
     await expect(heading(page, "Enter the code")).toBeVisible();
-    await page.getByLabel("6-digit code", { exact: true }).fill("000000");
+    await page.getByLabel("6-digit code", { exact: true }).fill(SENT_CODE);
     await expect(page.getByText(words, { exact: true })).toBeVisible();
     await expect(heading(page, "Enter the code")).toBeVisible();
     await expect(button(page, "Retry")).toHaveCount(0);
@@ -709,7 +705,7 @@ try {
     assert.equal(f.calls("/auth/v1/verify").length, 1, `${foldStatus}: the code is verified once`);
     // Typing the spent code again does nothing.
     await page.getByLabel("6-digit code", { exact: true }).fill("");
-    await page.getByLabel("6-digit code", { exact: true }).fill("000000");
+    await page.getByLabel("6-digit code", { exact: true }).fill(SENT_CODE);
     await page.waitForTimeout(300);
     assert.equal(f.calls("/auth/v1/verify").length, 1, `${foldStatus}: never verified again`);
     assert.equal(f.calls("/functions/v1/fold-phone-account").length, 1, `${foldStatus}: never posted again`);

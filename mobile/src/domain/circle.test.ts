@@ -96,7 +96,7 @@ test("the example name is the same whatever order the guests come in (C16)", () 
 });
 
 test("the placeholder readGuests gives a guest without a name is never the example (Q40)", () => {
-  assert.equal(UNNAMED, "Tester");
+  assert.equal(UNNAMED, "Guest");
   assert.ok(RSVP.includes("display_name || UNNAMED_GUEST"), "readGuests fills in the exported constant");
   const guests = [
     { userId: "a", name: UNNAMED, response: "accepted" },

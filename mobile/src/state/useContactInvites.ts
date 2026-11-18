@@ -31,7 +31,7 @@ const digitsOf = (e164: string) => e164.replace(/\D/g, "");
 
 export type Access = "idle" | "loading" | "ready" | "denied" | "web";
 export type Sendable = { number: ContactNumber; code: string; sentVia?: StoredInvite["sentVia"] };
-export type Outcome = { inApp: string[]; already: string[]; links: Sendable[] };
+export type Outcome = { inApp: string[]; already: string[]; unavailable: string[]; links: Sendable[] };
 /** The personal link's message: `inviter` only when a guest brings someone (CO-P9), "" when their name isn't known. */
 export type Message = { inviter?: string; host: string; title: string; when: string };
 
@@ -301,7 +301,7 @@ export function useContactInvites(a: {
         invitedUsers,
         (n) => storedFor(stored, n.e164)?.code ?? newInviteCode(getRandomBytes(16)),
       );
-      const out: Outcome = { inApp: [], already: [], links: [] };
+      const out: Outcome = { inApp: [], already: [], unavailable: [], links: [] };
       // The numbers first: a failure here shows on the Pick step, and nothing else is sent.
       if (phones.length) {
         const results = await contactInviteGateway.invite(planId, phones);
@@ -318,6 +318,9 @@ export function useContactInvites(a: {
             (kind === "app" ? out.inApp : out.already).push(n.name);
           } else if (kind === "self") {
             await inviteCodeStore.remove(scope, planId, n.e164).catch(() => {});
+          } else if (kind === "unavailable") {
+            await inviteCodeStore.remove(scope, planId, n.e164).catch(() => {});
+            out.unavailable.push(n.name);
           }
         }
       }

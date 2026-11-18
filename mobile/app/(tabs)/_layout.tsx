@@ -43,13 +43,6 @@ export default function TabLayout() {
         <NativeTabs.Trigger.Label>My resbites</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf="calendar" md="calendar_month" />
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="wellness">
-        <NativeTabs.Trigger.Label>Wellness</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon
-          sf={{ default: "leaf", selected: "leaf.fill" }}
-          md="spa"
-        />
-      </NativeTabs.Trigger>
       <NativeTabs.Trigger name="profile">
         <NativeTabs.Trigger.Label>Profile</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon

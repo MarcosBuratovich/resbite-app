@@ -3,7 +3,7 @@ import { AppState, Platform, type ScrollView } from "react-native";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import { supabase, configured } from "../services/supabase";
-import { safeAuthCode, validateRegistration } from "../domain/rules";
+import { safeAuthCode } from "../domain/rules";
 import { exchangeAuthCode } from "../services/authCallback";
 import { appleSignInDeps, signInWithApple } from "../services/appleSignIn";
 import { confirmationStore } from "../services/confirmation";
@@ -12,7 +12,6 @@ import {
   checkEmailConfirmation, confirmationNotice, recoveryNotice,
   emailRequestFailure, retrySeconds, normalizeEmail, validEmail,
 } from "../services/confirmationFlow";
-import { emptyRegistration, validateDetails, validateSignupStep, registrationMetadata } from "../domain/registration";
 import type { AuthMode } from "../domain/accountCopy";
 
 WebBrowser.maybeCompleteAuthSession();
@@ -26,8 +25,6 @@ export function useAuthFlow() {
   const [mode, setMode] = useState<AuthMode>(
     params.mode === "register" || params.mode === "reset" || params.mode === "confirm" ? params.mode : "login",
   );
-  const [details, setDetails] = useState(emptyRegistration);
-  const [step, setStep] = useState(0);
   const [confirmedEmail, setConfirmedEmail] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState("");
@@ -48,7 +45,7 @@ export function useAuthFlow() {
   const remaining = pending && normalizeEmail(pending.email) === normalizeEmail(destination)
     ? retrySeconds(pending, now) : 0;
 
-  useEffect(() => { scroll.current?.scrollTo({ y: 0, animated: false }); }, [step, confirmedEmail, mode]);
+  useEffect(() => { scroll.current?.scrollTo({ y: 0, animated: false }); }, [confirmedEmail, mode]);
   useEffect(() => {
     const tick = () => setNow(Date.now());
     const timer = setInterval(tick, 1000);
@@ -135,49 +132,26 @@ export function useAuthFlow() {
     }
     const current = generation.current;
     setError(null); setNotice("");
-    if (mode === "register" && step < 2) {
-      const invalid = validateSignupStep(step, details);
-      if (invalid) { setError(invalid); return; }
-      setStep(step + 1); return;
-    }
-    const invalid = mode === "register"
-      ? validateDetails(details) || validateRegistration(email, password)
-      : !validEmail(email) ? "Enter a valid email address." : !password ? "Enter your password." : null;
+    const invalid = !validEmail(email) ? "Enter a valid email address." : !password ? "Enter your password." : null;
     if (invalid) { setError(invalid); return; }
     if (!configured) { setError("Account services are not configured yet."); return; }
     working.current = true; setBusy(true);
-    let record: PendingEmailRequest | null = null;
     try {
-      if (mode === "register") {
-        record = await confirmationStore.reserve(email, "confirmation");
-        if (generation.current !== current) return;
-        setPending(record); setNow(Date.now());
-        const { error: signupError } = await supabase.auth.signUp({
-          email: email.trim(), password,
-          options: { emailRedirectTo: "resbite://auth/callback", data: registrationMetadata(details) },
-        });
-        if (signupError) throw signupError;
-        if (generation.current !== current) return;
-        setConfirmedEmail(email.trim()); setPassword(""); setMode("confirm");
-        setNotice(confirmationNotice);
-      } else {
-        const { error: loginError } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
-        if (generation.current !== current) return;
-        if (loginError) {
-          if (loginError.code === "email_not_confirmed") {
-            setConfirmedEmail(email.trim()); setMode("confirm"); setPassword("");
-            setNotice("Confirm your email before signing in. Open your most recent Resbite email on this device, or request another below.");
-            return;
-          }
-          throw loginError;
+      const { error: loginError } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+      if (generation.current !== current) return;
+      if (loginError) {
+        if (loginError.code === "email_not_confirmed") {
+          setConfirmedEmail(email.trim()); setMode("confirm"); setPassword("");
+          setNotice("Confirm your email before signing in. Open your most recent Resbite email on this device, or request another below.");
+          return;
         }
-        if (pending && normalizeEmail(pending.email) === normalizeEmail(email))
-          await confirmationStore.clear(pending).catch(() => {});
-        if (generation.current === current) router.replace("/account");
+        throw loginError;
       }
+      if (pending && normalizeEmail(pending.email) === normalizeEmail(email))
+        await confirmationStore.clear(pending).catch(() => {});
+      if (generation.current === current) router.replace("/account");
     } catch (failure) {
-      if (mode === "register") await recordFailure(record, failure, current);
-      else if (generation.current === current)
+      if (generation.current === current)
         setError(failure instanceof Error ? failure.message : "Unable to connect. Please try again.");
     } finally { working.current = false; setBusy(false); }
   }
@@ -218,7 +192,7 @@ export function useAuthFlow() {
   }
 
   function switchMode(next: AuthMode) {
-    setMode(next); setConfirmedEmail(""); setShowPassword(false); setStep(0);
+    setMode(next); setConfirmedEmail(""); setShowPassword(false);
     setPassword(""); setError(null); setNotice("");
   }
   async function forgetDestination() {
@@ -283,7 +257,7 @@ export function useAuthFlow() {
     } finally { working.current = false; setBusy(false); }
   }
   return {
-    mode, step, setStep, details, setDetails, confirmedEmail, setConfirmedEmail,
+    mode, confirmedEmail, setConfirmedEmail,
     showPassword, setShowPassword, email, setEmail, password, setPassword,
     busy, restoring, blocked, error, setError, notice, setNotice, pending, remaining, scroll,
     submit, checkConfirmed, switchMode, forgetDestination, google, apple,

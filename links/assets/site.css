@@ -1,0 +1,16 @@
+/* The footer every page carries (the legal pages, the personal pages, /invite). */
+:root { color-scheme: light; }
+.site-footer {
+  box-sizing: border-box;
+  max-width: 390px;
+  margin: 32px auto 0;
+  padding: 16px 16px 40px;
+  text-align: center;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #6b6575;
+}
+.site-footer p { margin: 8px 0; overflow-wrap: anywhere; }
+.site-footer a { color: #245f60; }
+.site-footer nav { display: flex; flex-wrap: wrap; justify-content: center; gap: 0 16px; }
+.site-footer nav a { display: inline-flex; align-items: center; min-height: 44px; }

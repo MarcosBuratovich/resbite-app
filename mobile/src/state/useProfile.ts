@@ -5,7 +5,7 @@ import * as Crypto from "expo-crypto";
 import { useAccount } from "./AccountState";
 import { useApp } from "./AppState";
 import { usePushRegistration } from "./usePushRegistration";
-import { detailsFromMetadata } from "../domain/registration";
+import { nameFromSession } from "../domain/guestAccount";
 import { pendingInviteParams } from "../domain/appLinks";
 import {
   readProfile,
@@ -98,17 +98,11 @@ export function useProfile() {
       if (!current()) return;
       setProfile(value);
       setPending(operation);
-      if (!dirty.current) {
-        const registeredName = detailsFromMetadata(
-          account.user?.user_metadata ?? session?.user.user_metadata,
-        ).name;
+      if (!dirty.current)
         setName(
           value?.display_name ||
-            (typeof registeredName === "string"
-              ? registeredName.slice(0, 80)
-              : ""),
+            (nameFromSession(account.user ?? session?.user ?? null, null) ?? ""),
         );
-      }
       if (value?.avatar_path) {
         const uri = await signedPhoto(value.avatar_path);
         if (current()) setPhotoUri(uri);

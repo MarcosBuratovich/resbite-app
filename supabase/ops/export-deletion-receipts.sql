@@ -1,0 +1,16 @@
+-- Export every deletion receipt from the live database before a backup restore (App Store readiness plan 2:
+-- docs/superpowers/plans/2026-11-17-asr-2-account-deletion.md; D-4, ASR2-10, DEL-6).
+--
+-- OWNER-RUN, NOT A MIGRATION. Read-only: it writes nothing. Section 2, step 3 of qa/deletion-restore-procedure.md, run
+-- before any restore, planned or not, while the live database can still be read, and only once the fence is up (the
+-- Data API off), so no deletion can land after the export. The CLI reaches Postgres directly, not through the Data API
+-- (check this at the time). From the repository root, with the project linked, and with the output going to a private
+-- folder outside the repo:
+--   supabase db query --linked -f supabase/ops/export-deletion-receipts.sql -o json > <private folder outside the repo>/receipts.json
+-- The file holds account ids. Never commit it, and never paste it into a ticket, a chat or a log. Delete it once the
+-- replay is recorded. Record only the number of rows.
+-- One row per receipt, oldest first: user_id, request_id, recovery_hash (the sha256 of the person's recovery secret, as
+-- 64 hex characters; the secret itself is never stored), status, requested_at and completed_at.
+-- Receipts outlive backups (a complete receipt is purged 30 days after completion, and backups are kept 7 days), so one
+-- export taken behind the fence covers every backup. supabase/ops/replay-deletions.sql replays it after the restore.
+select user_id, request_id, encode(recovery_hash,'hex') as recovery_hash, status, requested_at, completed_at from private.account_deletion_jobs order by requested_at;

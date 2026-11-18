@@ -1,7 +1,7 @@
 import { CIRCLE_COPY } from "../domain/circleCopy";
 import { CONNECTIONS_COPY } from "../domain/connectionsCopy";
 import { INVITE_COPY } from "../domain/inviteCopy";
-export type InviteKind = "app" | "link" | "self" | "already";
+export type InviteKind = "app" | "link" | "self" | "already" | "unavailable";
 /** A phone number to invite: its digits, calling code and the personal code its link carries. */
 export type PhoneItem = { phone: string; country: string; code: string };
 /** A Resbite connection to invite in the app, by user id (CO-P4). */
@@ -64,7 +64,7 @@ function failure(e: unknown): Error {
   return Error(inviteErrorMessage(e));
 }
 
-const kinds: readonly string[] = ["app", "link", "self", "already"];
+const kinds: readonly string[] = ["app", "link", "self", "already", "unavailable"];
 const BATCH = 50;
 /** A reply that answers its item: the same shape (a phone for a number, a user for a connection) and a known kind. */
 const answers = (item: InviteItem, d: unknown): boolean => {

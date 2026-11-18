@@ -6,7 +6,6 @@ type ContactPermission = {
 };
 type ContactRow = {
   fullName?: string | null;
-  emails?: { address?: string | null }[];
   phones?: { number?: string | null }[];
 };
 export type ContactAdapter = {
@@ -68,13 +67,12 @@ export function createContactService(adapter: ContactAdapter) {
       const people = mergePeople(
         ...rows.map((row) => {
           const name = row.fullName?.trim() || "Unnamed contact";
-          const options = [
-            ...(row.emails ?? []).map((e) => e.address),
-            ...(row.phones ?? []).map((p) => p.number),
-          ].flatMap((address) => {
-            const p = address ? person(name, address) : null;
-            return p ? [p] : [];
-          });
+          const options = (row.phones ?? [])
+            .map((p) => p.number)
+            .flatMap((address) => {
+              const p = address ? person(name, address) : null;
+              return p ? [p] : [];
+            });
           if (!options.length) missing++;
           return options;
         }),
@@ -118,11 +116,8 @@ async function nativeService() {
     requestPermission: contacts.requestPermissionsAsync,
     read: (offset, limit) =>
       contacts.Contact.getAllDetails(
-        [
-          contacts.ContactField.FULL_NAME,
-          contacts.ContactField.EMAILS,
-          contacts.ContactField.PHONES,
-        ],
+        // Names and phone numbers only: Resbite never reads email addresses.
+        [contacts.ContactField.FULL_NAME, contacts.ContactField.PHONES],
         // Expo 57.0.5's JS userDefault value disagrees with iOS useDefault.
         // Omitting it uses the native user's default order on both platforms.
         { offset, limit },

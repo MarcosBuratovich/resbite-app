@@ -4,6 +4,7 @@ import test from "node:test";
 // Bare "libphonenumber-js/min" does not resolve from links/ (node_modules lives under mobile/), so the path is explicit.
 import * as lib from "../mobile/node_modules/libphonenumber-js/min/index.js";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   composeNumber,
   phoneKey,
@@ -18,10 +19,10 @@ import {
   errorText,
   rpcError,
   sendError,
+  HOOK_WORDS,
   verifyError,
   sessionFrom,
   sessionExpired,
-  isTestCode,
   RESEND_DELAY_MS,
   KEPT_PREFIX,
   keptKey,
@@ -37,11 +38,18 @@ import {
   screenForRequest,
   screenForReturn,
   openDoneScreen,
+  numberNotice,
+  linkedParts,
+  INVITEE_ANCHOR,
 } from "./assets/personal-flow.mjs";
+import { LEGAL_PAGES } from "./legal/pages.mjs";
+import * as flow from "./assets/personal-flow.mjs";
 import { GUEST_COPY } from "../mobile/src/domain/guestAccount.ts";
-import { PHONE_CODE_COPY } from "../mobile/src/services/phoneCode.ts";
+import { HOOK_SMS_COPY, PHONE_CODE_COPY } from "../mobile/src/services/phoneCode.ts";
+import { SMS_COPY } from "../supabase/functions/_shared/sms-hook.ts";
 import { PHONE_COPY } from "../mobile/src/domain/phoneCopy.ts";
 import { INVALID_PHONE } from "../mobile/src/domain/phone.ts";
+import { SAFETY_COPY } from "../mobile/src/domain/safetyCopy.ts";
 
 test("composeNumber parses with the chosen country and returns the send form", () => {
   const rows = [
@@ -322,16 +330,25 @@ test("server errors map to the page's words", () => {
   assert.equal(rpcError(403, { code: "42501", message: "Invitation unavailable" }), "unavailable");
   assert.equal(rpcError(401, { code: "PGRST301", message: "JWT expired" }), "signedOut");
   assert.equal(rpcError(400, { code: "22023", message: "Name required" }), "nameRule");
+  // Plan 4 (C7): a name holding a blocked word is said as such, not as an invitation gone; only the exact message.
+  assert.equal(rpcError(400, { code: "22023", message: "Not allowed" }), "nameNotAllowed");
+  assert.equal(errorText("nameNotAllowed", "Ana"), "That name includes a word Resbite doesn’t allow. Try another.");
+  assert.equal(PAGE_COPY.nameNotAllowed, SAFETY_COPY.nameNotAllowed, "the web and the app say the same");
+  assert.equal(rpcError(400, { code: "22023", message: "Not allowed here" }), "unavailable");
+  assert.equal(rpcError(403, { code: "42501", message: "Not allowed" }), "unavailable");
   assert.equal(sendError(0, null), "connection");
   assert.equal(sendError(429, { msg: "Too many requests" }), "wait");
-  assert.equal(sendError(422, { msg: "Phone signups are disabled" }), "Phone signups are disabled");
+  // Only the hook's own words come through; any other Auth message is the connection copy.
+  assert.equal(sendError(422, { msg: "Phone signups are disabled" }), "connection");
   assert.equal(sendError(400, {}), "connection");
   assert.equal(verifyError(0, null, 0, 1), "connection");
   assert.equal(verifyError(400, { error_code: "otp_expired" }, 0, 60_000), "mismatch");
   assert.equal(verifyError(400, { error_code: "otp_expired" }, 0, 600_000), "expired");
   assert.equal(errorText("wrongNumber", "Marcos"), "That isn’t the number Marcos invited.");
   assert.equal(errorText("connection", "Marcos"), "Check your connection and try again.");
-  assert.equal(errorText("Phone signups are disabled", "Marcos"), "Phone signups are disabled");
+  assert.equal(errorText("Phone signups are disabled", "Marcos"), "Check your connection and try again.");
+  assert.equal(errorText("signedOut", "Marcos"), "Check your connection and try again.");
+  assert.equal(errorText({ msg: "x" }, "Marcos"), "Check your connection and try again.");
   assert.equal(errorText(null, "Marcos"), "");
 });
 
@@ -347,10 +364,55 @@ test("sessions: read from GoTrue's reply, with the number; expired a minute earl
   assert.equal(sessionExpired(s, 941_000), true);
 });
 
-test("only the test code is exchanged", () => {
-  assert.equal(isTestCode("000000"), true);
-  assert.equal(isTestCode("123456"), false);
-  assert.equal(isTestCode("0000000"), false);
+test("the page has no test-code path", () => {
+  assert.equal("isTestCode" in flow, false);
+  const page = readFileSync(new URL("./assets/personal.js", import.meta.url), "utf8");
+  assert.ok(!page.includes("exchange_test_code"));
+  assert.ok(!page.includes("000000"));
+});
+
+test("the code words match the Auth settings: six digits, ten minutes", () => {
+  assert.equal(PAGE_COPY.numberHint, "We’ll text you a 6-digit code.");
+  assert.equal(PAGE_COPY.confirmBody("Ana"), "Type the number Ana invited. We’ll text it a code.");
+  assert.equal(PAGE_COPY.codeBody("+44 7700 900834"), "We sent a 6-digit code to +44 7700 900834.");
+  assert.equal(verifyError(400, {}, 0, 599_999), "mismatch");
+  assert.equal(verifyError(400, {}, 0, 600_000), "expired");
+});
+
+test("a refusal from the text-message hook reaches the page as written", () => {
+  const words = "We can’t text this number. Check it, or use another number.";
+  assert.equal(sendError(422, { msg: words }), words);
+  assert.equal(errorText(sendError(422, { msg: words }), "Marcos"), words);
+  assert.equal(sendError(400, { code: 400, msg: "Invalid code request." }), "Invalid code request.");
+  assert.equal(errorText("Invalid code request.", "Marcos"), "Invalid code request.");
+});
+
+test("the page's hook words are the hook's own, and the app's", () => {
+  assert.deepEqual([...HOOK_WORDS].sort(), Object.values(SMS_COPY).sort());
+  assert.deepEqual([...HOOK_WORDS].sort(), [...HOOK_SMS_COPY].sort());
+  assert.ok(Object.isFrozen(HOOK_WORDS));
+});
+
+test("a hook timeout or any other Auth message reads as the connection copy on /r/ and /i/", () => {
+  // GoTrue's error body: { code, error_code, msg }. The hook_* codes are Supabase's Auth error codes.
+  const bodies = [
+    [422, { code: 422, error_code: "hook_timeout", msg: "Failed to reach hook within maximum time of 5.000000 seconds" }],
+    [422, { code: 422, error_code: "hook_timeout_after_retry", msg: "Failed to reach hook after maximum retries" }],
+    [429, { code: 429, error_code: "hook_timeout", msg: "Failed to reach hook within maximum time of 5.000000 seconds" }],
+    [422, { code: 422, error_code: "hook_timeout", msg: "We can’t text this number. Check it, or use another number." }],
+    [400, { code: 400, error_code: "validation_failed", msg: "Invalid phone number format (E.164 required)" }],
+    [422, { code: 422, error_code: "sms_send_failed", msg: "Error sending confirmation OTP to provider: x" }],
+    [400, { code: 400, msg: "Unsupported phone provider" }],
+    [422, { msg: "" }],
+    [422, null],
+  ];
+  for (const [status, body] of bodies) {
+    assert.equal(sendError(status, body), "connection", JSON.stringify(body));
+    assert.equal(errorText(sendError(status, body), "Marcos"), "Check your connection and try again.");
+  }
+  // The hook's own busy answer arrives as Auth's 503.
+  assert.equal(sendError(503, { code: 503, msg: SMS_COPY.unavailable }), "connection");
+  assert.equal(errorText("Failed to reach hook within maximum time of 5.000000 seconds", "Marcos"), "Check your connection and try again.");
 });
 
 test("Not you? Sign out goes back to the invitation from the answer and done steps, not mid-request", () => {
@@ -617,4 +679,50 @@ test("wrongNumber names the inviter when there is one, else the host", () => {
 test("errorText: a blank inviter falls back to the host", () => {
   for (const blank of ["", "  ", " ", "​‍", "﻿"])
     assert.equal(errorText("wrongNumber", "Ana", blank), "That isn’t the number Ana invited.");
+});
+
+const noticeDoc = readFileSync(new URL("../docs/legal/invitee-notice-short.md", import.meta.url), "utf8");
+/** The quoted line after `label` in the section headed `heading`. */
+const quotedAfter = (heading, label) => {
+  const section = noticeDoc.slice(noticeDoc.indexOf(heading));
+  return section.slice(section.indexOf(label)).match(/^> (.+)$/m)[1];
+};
+const plain = (md) => md.replace(/\*\*/g, "").replace(/\[([^\]]+)\]\(([^)]+)\)/g, "$1").replace(/'/g, "’");
+const linkOf = (md) => md.match(/\]\(([^)]+)\)/)[1];
+const words = (parts) => parts.map((p) => p.text).join("");
+
+test("the notice and the right to object are the published words, exactly", () => {
+  const personal = quotedAfter("## Personal invitation page", "**Notice**");
+  const object = quotedAfter("## Personal invitation page", "**Right to object**");
+  const event = quotedAfter("## Event link page", "**Notice**");
+  assert.equal(PAGE_COPY.personalNotice("Marcos"), plain(personal).replace("{host}", "Marcos"));
+  assert.equal(`${PAGE_COPY.objectionLabel} ${PAGE_COPY.objection}`, plain(object));
+  assert.equal(PAGE_COPY.openNotice("Marcos"), plain(event).replace("{host}", "Marcos"));
+  const mine = numberNotice({ open: false, who: "Marcos", privacyUrl: "https://link.resbite.com/privacy" });
+  assert.equal(mine.notice.at(-1).href, linkOf(personal));
+  assert.equal(numberNotice({ open: true, who: "Marcos", privacyUrl: "https://link.resbite.com/privacy" }).notice.at(-1).href, linkOf(event));
+});
+
+test("numberNotice: the open link has no objection; the objection's label is strong; mail links; no URL, no link", () => {
+  const personal = numberNotice({ open: false, who: "Pedro", privacyUrl: "https://link.resbite.com/privacy" });
+  assert.equal(words(personal.notice), PAGE_COPY.personalNotice("Pedro"));
+  assert.deepEqual(personal.objection[0], { text: "Right to object:", href: "", strong: true });
+  assert.ok(personal.objection.some((p) => p.href === "mailto:privacy@resbite.com"));
+  const open = numberNotice({ open: true, who: "Marcos", privacyUrl: "" });
+  assert.equal(open.objection, null);
+  assert.ok(open.notice.some((p) => p.text === "privacy@resbite.com" && p.href === "mailto:privacy@resbite.com"));
+  assert.deepEqual(open.notice.at(-1), { text: "Privacy Policy", href: "" });
+});
+
+test("linkedParts links whole phrases, longest first", () => {
+  const links = { "Terms of Use": "https://t", Terms: "https://t", "Privacy Policy": "https://p" };
+  assert.deepEqual(linkedParts("I agree to the Terms and Privacy Policy.", links), [
+    { text: "I agree to the ", href: "" }, { text: "Terms", href: "https://t" }, { text: " and ", href: "" },
+    { text: "Privacy Policy", href: "https://p" }, { text: ".", href: "" }]);
+  assert.deepEqual(linkedParts("I’m 18 or over and I accept the Terms of Use.", links)[1], { text: "Terms of Use", href: "https://t" });
+  assert.deepEqual(linkedParts("I’m 18 or over", links), [{ text: "I’m 18 or over", href: "" }]);
+});
+
+test("the notice's anchor is one the Privacy Policy page must have", () => {
+  assert.ok(LEGAL_PAGES.find((p) => p.route === "/privacy").anchors.includes(INVITEE_ANCHOR));
 });

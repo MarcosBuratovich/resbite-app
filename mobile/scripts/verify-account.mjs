@@ -13,7 +13,7 @@ async function fixture(
   access = "approved",
   metadata = { full_name: "Google Fixture" },
 ) {
-  let user = {
+  const user = {
     id: "11111111-1111-4111-8111-111111111111",
     aud: "authenticated",
     role: "authenticated",
@@ -39,12 +39,13 @@ async function fixture(
     reducedMotion: "reduce",
   });
   const errors = [],
-    requests = [],
-    writes = [];
+    requests = [];
   let profile = null,
     failAccess = false,
-    loseReply = false,
-    claims = 0;
+    claims = 0,
+    // Plan 4: the account has yet to accept the published Terms version (2026-12).
+    termsNeeded = false;
+  const accepts = [];
   page.on("pageerror", (e) => errors.push(e.message));
   page.on("console", (m) => {
     if (m.type() === "error" && !/Failed to load resource/.test(m.text()))
@@ -87,30 +88,17 @@ async function fixture(
       return reply(
         failAccess
           ? { message: "Offline" }
-          : { account_id: user.id, status: access },
+          : { account_id: user.id, status: access, terms_version: "2026-12", terms_needed: termsNeeded },
         failAccess ? 503 : 200,
       );
     if (path === "/rest/v1/profiles") return reply(profile);
-    if (path === "/rest/v1/rpc/save_registration_details") {
-      const { p_expected, p_details } = req.postDataJSON();
-      writes.push(p_details);
-      assert.deepEqual(
-        p_expected,
-        user.user_metadata.registration_details ?? null,
-      );
-      user = {
-        ...user,
-        user_metadata: {
-          ...user.user_metadata,
-          registration_details: p_details,
-          registration_details_version: 1,
-        },
-      };
-      if (loseReply) {
-        loseReply = false;
-        return route.abort("failed");
-      }
-      return reply({ account_id: user.id, registration_details: p_details });
+    if (path === "/rest/v1/rpc/accept_terms") {
+      const body = req.postDataJSON();
+      accepts.push({ body, claimsBefore: claims });
+      if (body.p_terms_version !== "2026-12")
+        return reply({ code: "22023", message: "Terms changed" }, 400);
+      termsNeeded = false;
+      return route.fulfill({ status: 204, body: "" });
     }
     if (path === "/rest/v1/rpc/save_profile") {
       profile = { display_name: req.postDataJSON().p_name, avatar_path: null };
@@ -151,12 +139,11 @@ async function fixture(
     page,
     errors,
     requests,
-    writes,
-    user: () => user,
     claims: () => claims,
+    accepts: () => accepts,
+    termsNeeded: (next) => (termsNeeded = next),
     access: (next) => (access = next),
     failAccess: (next) => (failAccess = next),
-    loseReply: () => (loseReply = true),
     profileReady: () =>
       (profile = { display_name: "Fixture", avatar_path: null }),
   };
@@ -174,79 +161,24 @@ try {
     await expect(
       page.getByLabel("What should we call you?", { exact: true }),
     ).toHaveValue("Google Fixture");
-    assert.equal(f.writes.length, 0);
     await page.getByRole("button", { name: "Save", exact: true }).click();
-    await page.getByText("Account details", { exact: true }).click();
     await expect(
-      page.getByRole("heading", { name: "Account details", exact: true }),
+      page.getByText("Your profile is saved.", { exact: true }),
     ).toBeVisible();
-    await page
-      .getByRole("button", { name: "About these details", exact: true })
-      .click();
+    // Plan 4 (D-9): the optional details are gone. The rows are drawn (Notifications), but no Account details row,
+    // and nothing ever asks for the dropped write.
+    await expect(page.getByText("Notifications", { exact: true })).toBeVisible();
     await expect(
-      page.getByText(
-        "Date of birth is optional and is not displayed on shared plans.",
-        { exact: true },
-      ),
-    ).toBeVisible();
-    await page.getByRole("button", { name: "Close sheet", exact: true }).click();
-    await page
-      .getByLabel("Date of birth (optional)", { exact: true })
-      .fill("2000-02-29");
-    await page
-      .getByLabel("Phone number (optional)", { exact: true })
-      .fill("+44 7700 900123");
-    await page.getByLabel("City (optional)", { exact: true }).fill("London");
-    await page.getByText("Outdoors", { exact: true }).click();
+      page.getByText("Account details", { exact: true }),
+    ).toHaveCount(0);
     await page.screenshot({
-      path: `${shots}/details-${width}.png`,
+      path: `${shots}/profile-${width}.png`,
       fullPage: true,
     });
-    // The reply is lost after the write lands: the re-read confirms it.
-    f.loseReply();
-    await page
-      .getByRole("button", { name: "Save", exact: true })
-      .click();
-    await expect(
-      page.getByText("Account details saved.", { exact: true }),
-    ).toBeVisible();
-    assert.equal(f.writes.length, 1);
-    assert.deepEqual(f.writes[0], {
-      birth_date: "2000-02-29",
-      phone: "+447700900123",
-      city: "London",
-      interests: ["Outdoors"],
-    });
-    await page.reload();
-    await expect(
-      page.getByRole("heading", { name: "Account details", exact: true }),
-    ).toBeVisible();
-    await expect(
-      page.getByLabel("City (optional)", { exact: true }),
-    ).toHaveValue("London");
-    await page
-      .getByRole("button", { name: "Clear details", exact: true })
-      .click();
-    await page
-      .getByRole("button", { name: "Save", exact: true })
-      .click();
-    await expect(
-      page.getByText("Account details saved.", { exact: true }),
-    ).toBeVisible();
-    assert.deepEqual(f.writes[1], {
-      birth_date: null,
-      phone: null,
-      city: null,
-      interests: [],
-    });
-    await page.reload();
-    await expect(
-      page.getByRole("heading", { name: "Account details", exact: true }),
-    ).toBeVisible();
-    await expect(
-      page.getByLabel("City (optional)", { exact: true }),
-    ).toHaveValue("");
-    assert.equal(f.user().user_metadata.full_name, "Google Fixture");
+    assert.equal(
+      f.requests.includes("/rest/v1/rpc/save_registration_details"),
+      false,
+    );
     assert.deepEqual(f.errors, []);
     await page.close();
   }
@@ -328,8 +260,48 @@ try {
   assert.equal(restored.claims(), 1);
   assert.deepEqual(restored.errors, []);
   await restored.page.close();
+  // Plan 4, Review Focus 5: a kept invitation on an approved account with a profile that has yet to accept the
+  // Terms. The accept screen comes first and nothing is claimed before Continue; then the invitation opens.
+  for (const width of [320, 390]) {
+    const kept = await fixture(width);
+    kept.profileReady();
+    kept.termsNeeded(true);
+    await kept.page.addInitScript((token) => {
+      if (!sessionStorage.getItem("fixture-invite-seeded")) {
+        sessionStorage.setItem("resbite.pending-invite", token);
+        sessionStorage.setItem("fixture-invite-seeded", "1");
+      }
+    }, "c".repeat(64));
+    await kept.page.goto(`${base}/account`);
+    await expect(
+      kept.page.getByRole("heading", { name: "Please accept our Terms", exact: true }),
+    ).toBeVisible();
+    await expect(kept.page).toHaveURL(/\/accept-terms$/);
+    await kept.page.waitForTimeout(500);
+    assert.equal(kept.claims(), 0, "nothing is claimed before the Terms are accepted");
+    assert.equal(
+      await kept.page.evaluate(() => sessionStorage.getItem("resbite.pending-invite")),
+      "c".repeat(64),
+      "the invitation is kept on the accept screen",
+    );
+    await kept.page
+      .getByRole("checkbox", { name: "I’m 18 or over and I accept the Terms of Use.", exact: true })
+      .click();
+    await kept.page.getByRole("button", { name: "Continue", exact: true }).click();
+    await expect(
+      kept.page.getByRole("heading", { name: "Coffee evening", exact: true }),
+    ).toBeVisible();
+    assert.deepEqual(kept.accepts(), [{ body: { p_terms_version: "2026-12" }, claimsBefore: 0 }]);
+    assert.equal(kept.claims(), 1);
+    assert.equal(
+      await kept.page.evaluate(() => sessionStorage.getItem("resbite.pending-invite")),
+      null,
+    );
+    assert.deepEqual(kept.errors, []);
+    await kept.page.close();
+  }
   console.log(
-    "Account checks passed at 320/390px: Profile first with the account's name and no details step, details edit/removal/lost reply; pending access, retry and invitation preservation through approval. All backend requests intercepted.",
+    "Account checks passed at 320/390px: Profile first with the account's name and no details step, no Account details row and no details write; pending access, retry and invitation preservation through approval; a kept invitation waits behind Accept your Terms and opens after Continue. All backend requests intercepted.",
   );
 } finally {
   await browser.close();

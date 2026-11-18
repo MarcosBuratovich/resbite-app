@@ -2,6 +2,7 @@ import type { CategoryKey } from "./categories";
 import type { EventFields } from "./events";
 import { PLAN_COPY } from "./planCopy";
 import { planEnd } from "./planEnd";
+import { SAFETY_COPY, wordsRefused } from "./safetyCopy";
 
 /** A resbite as stored on the server (CE1: it carries its own event text). */
 export type Plan = {
@@ -209,6 +210,10 @@ export async function writePlan(
     }
     if (code === "22023" && /^Activity unavailable/.test(errorMessage(error))) {
       throw new PlanSaveError(PLAN_COPY.ideaGone, false, undefined, "idea");
+    }
+    // A blocked term in the title, the description or the Meeting details (C7): definite, and said as such.
+    if (wordsRefused(error)) {
+      throw new PlanSaveError(SAFETY_COPY.textNotAllowed);
     }
     if (code === "22023") {
       throw new PlanSaveError(

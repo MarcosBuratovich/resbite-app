@@ -10,10 +10,13 @@ Use Node 22.13+ and `npm ci`. Copy `.env.example` to `.env.local` and use the pr
 - `npm run ios`: open the iOS target (requires the Mac/iOS environment).
 - `npm run web`: developer-only layout review. This is not the deliverable mobile app.
 - `npm run check`: TypeScript, domain/session-storage tests and content-manifest validation.
+- `npm run check:release`: the production release check (support address, the Supabase URL and publishable key, push on, deletion on, legal-link overrides; it prints names, never the values). EAS runs it as the `eas-build-post-install` hook for the production profile.
+- `node --import tsx scripts/generate-licences.mjs`: regenerates the licence notices. Run it after any dependency change, then commit `src/domain/licences.json`.
+- `node scripts/verify-legal.mjs`: browser checks for the legal links, About and legal, Licences and Data & privacy, against Expo web.
 - `npx expo export --platform ios --output-dir dist-ios`: checks the iOS JavaScript bundle; does not compile/sign an iPhone app.
 - `node --import tsx ../links/verify-personal.mjs` and `node --import tsx ../links/verify-open-link.mjs`: the link site's personal invitation (`/i/<code>`) and open event link (`/r/<code>`) pages in headless Chrome, with every request intercepted.
 
-The development-only “Preview the design” entry uses memory-only plans, has a persistent preview label and cannot send invitations. It disappears in production. Sample wellness data is labelled in every build. Authenticated paths call Supabase; an empty roster grants no data access.
+The development-only “Preview the design” entry uses memory-only plans, has a persistent preview label and cannot send invitations. It disappears in production. Authenticated paths call Supabase; an empty roster grants no data access.
 
 ### Mac build notes
 

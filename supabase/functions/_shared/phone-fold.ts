@@ -10,8 +10,8 @@ export type FoldDeps = {
   setPhone(id: string, digits: string): Promise<void>;
 };
 
-/** The fold RPC refused the pair (Postgres 22023: the web account used the app, organizes an event, or is the same
- * account). Nothing moved; the handler answers 409. */
+/** The fold RPC refused the pair (Postgres 22023: the web account used the app, organizes an event, is under a legal
+ * hold or has a deletion pending, or is the same account). Nothing moved; the handler answers 409. */
 export class FoldRefused extends Error {}
 
 const json = (status: number, body: unknown) =>

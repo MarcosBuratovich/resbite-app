@@ -80,9 +80,9 @@ test("limited pages retain separate details, deduplicate normalized addresses an
   assert.equal(page.missing, 2);
   assert.deepEqual(
     page.people.map((p) => p.key),
-    ["email:a@example.com", "phone:+447700900123", "phone:07700900123"],
+    ["phone:+447700900123", "phone:07700900123"],
   );
-  assert.equal(page.people[2].name, "Unnamed contact");
+  assert.equal(page.people[1].name, "Unnamed contact");
 });
 
 test("pagination advances by raw records even when every record lacks usable details", async () => {
@@ -108,7 +108,7 @@ test("a page is discarded if permission is revoked or narrowed while it loads", 
       read: async () => [
         {
           fullName: "Private",
-          emails: [{ address: "private@example.invalid" }],
+          phones: [{ number: "07700 900999" }],
         },
       ],
     });
@@ -138,7 +138,7 @@ test("expanding access invokes only the iOS limited-access picker and does not r
 test("phone rows keep names and numbers, drop empty numbers and share the permission checks", async () => {
   const { service, calls } = fixture({
     read: async () => [
-      { fullName: "Ana Ruiz", emails: [{ address: "a@x.com" }], phones: [{ number: "07700 900834" }, { number: "" }] },
+      { fullName: "Ana Ruiz", phones: [{ number: "07700 900834" }, { number: "" }] },
       { fullName: null, phones: undefined },
     ],
   });

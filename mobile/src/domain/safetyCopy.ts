@@ -10,12 +10,25 @@ export const SAFETY_COPY = {
   /** The chat menu's entry, the resbite page's More row and the button beside its announcement line (B1, B4). */
   reportOrBlock: "Report or block",
   why: "What’s wrong?",
-  /** The four reasons, in the radios' order (Decision 4); the keys are what the server stores. */
-  reasons: { harassment: "Harassment", spam: "Spam", inappropriate: "Not appropriate", other: "Something else" },
+  /**
+   * The seven reasons, in the radios' order (Decision 4; plan 4 decision 7: the three priority reasons first, as the
+   * Terms section 10.4 and Support's "Choosing a reason" list them); the keys are what the server stores (C7).
+   */
+  reasons: {
+    illegal: "Illegal or dangerous",
+    child_safety: "Child safety",
+    intimate_image: "Intimate image shared without consent",
+    harassment: "Harassment",
+    spam: "Spam",
+    inappropriate: "Not appropriate",
+    other: "Something else",
+  },
   detailsLabel: "Anything else? (optional)",
   sendReport: "Send report",
   pickReason: "Pick a reason to send the report.",
   thanks: "Thanks. The Resbite team will look at it.",
+  /** Under the thanks: when reports are read (AS-R9). */
+  reviewTime: "We review reports every day.",
 
   // Block and unblock.
   block: (name: string) => `Block ${name}`,
@@ -45,6 +58,10 @@ export const SAFETY_COPY = {
   unblockFirst: "Unblock this person first.",
   /** A blocked term (G-B4(a)). */
   notAllowed: "That message can’t be sent.",
+  /** A blocked term in a name: the profile's name (save_profile; plan 4 decision 10), and the web's name step. */
+  nameNotAllowed: "That name includes a word Resbite doesn’t allow. Try another.",
+  /** A blocked term in a resbite's title or description, its Meeting details or its Note to guests (decision 10). */
+  textNotAllowed: "That includes a word Resbite doesn’t allow. Change it and try again.",
   /** The 21st report in 24 hours (I7). */
   reportLimit: "You’ve sent a lot of reports today. Try again later.",
 
@@ -52,6 +69,11 @@ export const SAFETY_COPY = {
   rulesTitle: "Chat rules",
   rules:
     "Be kind. No harassment, hate, threats or spam. Messages that break these rules are removed, and people who break them can lose their account.",
+  /**
+   * Under the rules, a link to the full rules in the Terms (community-rules-short.md section 1, "If the owner keeps the
+   * current text"). Adding it changes no rule, so the server's rules version stays as it is.
+   */
+  rulesLink: "Read the full community rules",
   agree: "I agree",
   /** A rules refusal and a failed I agree, each its own line, none the connection line (I6). */
   rulesFirst: "Agree to the chat rules first.",
@@ -81,9 +103,12 @@ export const SAFETY_COPY = {
   copyAddress: "Copy address",
   copied: "Copied",
 
-  /** Data & privacy's line on reports (G-S11, N9, I11): a person as well as a message, the reporter's own, the period. */
+  /**
+   * Data & privacy's line on reports (G-S11, N9, I11): a person as well as a message, the reporter's own, the period.
+   * AS-R2: a deleted reporter's reports stay, without the name, until the team closes them.
+   */
   reportsPrivacy:
-    "If you report a message or a person, the Resbite team reads the report and keeps a copy of what was reported, even if the message or that person’s account is deleted. If you delete your account, the reports you sent are deleted too. A report is deleted 180 days after the team closes it.",
+    "If you report a message or a person, the Resbite team reads the report and keeps a copy of what was reported, even if the message or that person’s account is deleted. If you delete your account, the reports you sent are kept until the team closes them, without your name. A report is deleted 180 days after the team closes it.",
   /**
    * Data & privacy's line on blocks (ruling SR4, owner question R-Q7's default, worded by SR10): a block row stays until
    * undone, and the team can read it (the daily read lists the last 7 days; that is a list, not a limit).
@@ -113,9 +138,21 @@ export function supportAddress(env: string | undefined): string | null {
  */
 export const shownName = (name: unknown): string => cleanName(name) || CHAT_COPY.someone;
 
-/** What a sent report says: the thanks, and the contact line when there is an address (G-N10). */
+/** What a sent report says: the thanks, when reports are read (AS-R9), and the contact line when there is an address (G-N10). */
 export const thanksLines = (address: string | null): string[] =>
-  address ? [SAFETY_COPY.thanks, SAFETY_COPY.contact(address)] : [SAFETY_COPY.thanks];
+  address
+    ? [SAFETY_COPY.thanks, SAFETY_COPY.reviewTime, SAFETY_COPY.contact(address)]
+    : [SAFETY_COPY.thanks, SAFETY_COPY.reviewTime];
+
+/**
+ * True when the server refused a write for a blocked term (C7): 22023 with the message "Not allowed", exactly, as the
+ * chat's own refusal. Other 22023 refusals ("Chat closed", "Plan unavailable", ...) and other codes are not.
+ */
+export function wordsRefused(e: unknown): boolean {
+  if (typeof e !== "object" || e === null) return false;
+  const { code, message } = e as { code?: unknown; message?: unknown };
+  return code === "22023" && message === "Not allowed";
+}
 
 /** The chat menu's "Report or block": hidden when nobody else is in the chat (G-N7). */
 export const showsReportOrBlock = (otherPeople: number): boolean => Number.isFinite(otherPeople) && otherPeople > 0;

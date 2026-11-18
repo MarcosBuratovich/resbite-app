@@ -6,6 +6,7 @@ import {
   type PhotoGateway,
 } from "./profilePhotoStore";
 import { stripJpegMetadata, MAX_PHOTO_BYTES } from "./photo";
+import * as safetyCopy from "../domain/safetyCopy";
 import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import ts from "typescript";
@@ -289,6 +290,7 @@ test("photo requests and name saves stay bound to the captured owner across SDK 
     if (name === "./plans") return { withDeadline: (fn: (signal: AbortSignal) => unknown) => fn(new AbortController().signal) };
     if (name === "./profilePhotoStore") return { createProfilePhotoStore };
     if (name === "./photo") return { MAX_PHOTO_BYTES };
+    if (name === "../domain/safetyCopy") return safetyCopy;
     if (name === "@supabase/supabase-js") return {
       createClient: (url: string, key: string, options: { accessToken: () => Promise<string> }) => createClient(url, key, {
         ...options,
@@ -313,6 +315,40 @@ test("photo requests and name saves stay bound to the captured owner across SDK 
   await service.saveProfile("Updated owner", "owner");
   assert.equal(requests.at(-1)?.token, "Bearer owner-token");
   assert.equal(requests.at(-1)?.path, "/rest/v1/rpc/save_profile");
+});
+
+test("a name refused for a blocked word is said as such; any other refusal is thrown as it came (plan 4, C7)", async () => {
+  const session = { access_token: "owner-token", user: { id: "owner" } };
+  let answer: { status: number; body: unknown } = { status: 400, body: { code: "22023", message: "Not allowed", details: null, hint: null } };
+  const names: unknown[] = [];
+  const service = loadNativeBoundary("./profile.ts", (name) => {
+    if (name === "react-native") return { Platform: { OS: "ios" } };
+    if (name === "./supabase") return { storage: {}, supabase: { auth: { getSession: async () => ({ data: { session }, error: null }) } } };
+    if (name === "./plans") return { withDeadline: (fn: (signal: AbortSignal) => unknown) => fn(new AbortController().signal) };
+    if (name === "./profilePhotoStore") return { createProfilePhotoStore };
+    if (name === "./photo") return { MAX_PHOTO_BYTES };
+    if (name === "../domain/safetyCopy") return safetyCopy;
+    if (name === "@supabase/supabase-js") return {
+      createClient: (url: string, key: string, options: { accessToken: () => Promise<string> }) => createClient(url, key, {
+        ...options,
+        global: { fetch: async (_input, init) => {
+          names.push(init?.body ? JSON.parse(String(init.body)).p_name : null);
+          return Response.json(answer.body, { status: answer.status });
+        } },
+      }),
+    };
+    throw Error(`Unexpected import: ${name}`);
+  });
+  // The module runs in its own context, so its Error is another realm's: the check reads the message, not instanceof.
+  await assert.rejects(service.saveProfile("  Ana zzbadword ", "owner"), (e: unknown) =>
+    (e as { message?: string }).message === "That name includes a word Resbite doesn’t allow. Try another." && !("code" in (e as object)));
+  assert.deepEqual(names, ["Ana zzbadword"]);
+  // Another 22023 is not a blocked word: it reaches the screen as the server's error, as before.
+  answer = { status: 400, body: { code: "22023", message: "Name required", details: null, hint: null } };
+  await assert.rejects(service.saveProfile("Ana", "owner"), (e: unknown) =>
+    typeof e === "object" && e !== null && (e as { code?: string }).code === "22023" && (e as { message?: string }).message === "Name required");
+  answer = { status: 200, body: "owner" };
+  await service.saveProfile("Ana", "owner");
 });
 
 test("picker cancellation does not normalize, and rendering failure releases native context", async () => {

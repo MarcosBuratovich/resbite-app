@@ -8,14 +8,12 @@ export type PhoneCodeDeps = {
   signInWithOtp(a: { phone: string; options: { shouldCreateUser: boolean } }): Promise<{ error: AuthError }>;
   updatePhone(phone: string): Promise<{ error: AuthError }>;
   verifyOtp(a: { phone: string; token: string; type: "sms" | "phone_change" }): Promise<{ error: AuthError }>;
-  exchangeTestCode(phone: string, code: string): Promise<string | null>;
   now(): number;
 };
 export type PhonePurpose = "signup" | "signin" | "add";
 
 const CODE_LIFETIME_MS = 600_000;
 const resendDelayMs = 60_000;
-const TEST_CODE = "000000";
 
 export const PHONE_CODE_COPY = {
   noAccount: "No Resbite account uses this number yet.",
@@ -30,6 +28,24 @@ export const PHONE_CODE_COPY = {
 const isConnectionFailure = (error: { status?: number }) =>
   error.status === 0 || (error.status !== undefined && error.status >= 500);
 
+/**
+ * The Send SMS hook's own words (`SMS_COPY` in supabase/functions/_shared/sms-hook.ts; a test keeps the two equal).
+ * They are the only server messages a code send shows. Any other Auth message, every `hook_*` error among them
+ * (`hook_timeout`: Auth gave up on the hook), reads as the connection copy.
+ */
+export const HOOK_SMS_COPY: readonly string[] = [
+  "Invalid code request.",
+  "We can’t text this number. Check it, or use another number.",
+  "Text messages aren’t available right now. Try again later.",
+];
+
+/** A failed send's words, once the known codes are mapped: the hook's own line as written, else the connection copy. */
+export function sendFailureMessage(error: { message?: string; code?: string }): string {
+  if (error.code?.startsWith("hook_")) return PHONE_CODE_COPY.connection;
+  const message = typeof error.message === "string" ? error.message : "";
+  return HOOK_SMS_COPY.includes(message) ? message : PHONE_CODE_COPY.connection;
+}
+
 export async function sendPhoneCode(
   d: PhoneCodeDeps,
   e164: string,
@@ -42,13 +58,14 @@ export async function sendPhoneCode(
         : await d.signInWithOtp({ phone: e164, options: { shouldCreateUser: purpose === "signup" } });
     if (!error) return { ok: true, resendAt: d.now() + resendDelayMs };
     if (isConnectionFailure(error)) return { ok: false, message: PHONE_CODE_COPY.connection };
+    if (error.code?.startsWith("hook_")) return { ok: false, message: PHONE_CODE_COPY.connection };
     if (purpose === "signin" && error.code === "otp_disabled")
       return { ok: false, reason: "no_account", message: PHONE_CODE_COPY.noAccount };
     if (purpose === "add" && error.code === "phone_exists")
       return { ok: false, reason: "taken", message: PHONE_CODE_COPY.taken };
     if (error.status === 429 || error.message.toLowerCase().includes("rate limit"))
       return { ok: false, message: PHONE_CODE_COPY.wait };
-    return { ok: false, message: error.message || PHONE_CODE_COPY.connection };
+    return { ok: false, message: sendFailureMessage(error) };
   } catch {
     return { ok: false, message: PHONE_CODE_COPY.connection };
   }
@@ -62,10 +79,9 @@ export async function verifyPhoneCode(
   sentAt: number,
   purpose: PhonePurpose,
 ): Promise<{ ok: true } | { ok: false; message: string; clear: boolean }> {
-  let code = token.replace(/\s/g, "");
+  const code = token.replace(/\s/g, "");
   if (!/^\d{6}$/.test(code)) return { ok: false, message: PHONE_CODE_COPY.mismatch, clear: true };
   try {
-    if (code === TEST_CODE) code = (await d.exchangeTestCode(e164, code)) ?? code;
     const { error } = await d.verifyOtp({ phone: e164, token: code, type: purpose === "add" ? "phone_change" : "sms" });
     if (!error) return { ok: true };
     if (isConnectionFailure(error)) return { ok: false, message: PHONE_CODE_COPY.connection, clear: false };
@@ -82,10 +98,5 @@ export const phoneCodeDeps: PhoneCodeDeps = {
   signInWithOtp: (a) => client().auth.signInWithOtp(a),
   updatePhone: (phone) => client().auth.updateUser({ phone }),
   verifyOtp: (a) => client().auth.verifyOtp(a),
-  exchangeTestCode: async (p_phone, p_code) => {
-    const { data, error } = await client().rpc("exchange_test_code", { p_phone, p_code });
-    if (error) throw new Error(error.message);
-    return (data as string | null) ?? null;
-  },
   now: () => Date.now(),
 };

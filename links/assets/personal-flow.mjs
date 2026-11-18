@@ -21,8 +21,8 @@ export const PAGE_COPY = {
   notYou: (host) => `Not your number? Ask ${host} to check it.`,
   confirmHeading: "Confirm it’s you",
   confirmBody: (host) => `Type the number ${host} invited. We’ll text it a code.`,
-  tick: "I’m 18 or over",
-  terms: "I agree to the Terms and Privacy Policy.",
+  tick: "I’m 18 or over and I accept the Terms of Use.",
+  terms: "Read the Terms of Use. Our Privacy Policy explains how we use your data.",
   ageHelper: "Resbite is for people aged 18 and over.",
   numberField: "Mobile number",
   countryLabel: "Country",
@@ -71,6 +71,8 @@ export const PAGE_COPY = {
   connection: "Check your connection and try again.",
   tooMany: "Too many tries. Try again later.",
   unavailable: "This invitation is no longer active.",
+  // Plan 4 (C7): a name holding a word Resbite doesn’t allow. The app's SAFETY_COPY.nameNotAllowed, exactly.
+  nameNotAllowed: "That name includes a word Resbite doesn’t allow. Try another.",
   signOut: "Not you? Sign out",
   // The open link (plan 3). Its number step names no invited number: it says what the app's number step says.
   numberHint: "We’ll text you a 6-digit code.",
@@ -79,19 +81,73 @@ export const PAGE_COPY = {
   notAdded: "You weren’t added to this resbite.",
   alreadyIn: "You’re on this resbite.",
   openApp: "Open Resbite",
+  // The notice beside the number field: the words of docs/legal/invitee-notice-short.md, tested against it.
+  personalNotice: (who) =>
+    `${who} gave Resbite Ltd this number to invite you. We use it to text you a code. Confirming it creates a Resbite account with your number, name and answer; other guests never see your number. Unanswered, the number is deleted within 30 days after the resbite ends. Privacy Policy`,
+  openNotice: (host) =>
+    `Resbite Ltd uses your number to text you a code and send your request to ${host}. Confirming it creates a Resbite account with your number, name and answer; other guests never see your number. We delete the account after 12 months without a resbite, or sooner if you ask at privacy@resbite.com. Privacy Policy`,
+  objectionLabel: "Right to object:",
+  objection: "tell us at any time to stop using your number. Email privacy@resbite.com and we’ll delete it and stop anyone inviting you by number.",
 };
 
-/** The error keys the reducer holds; anything else in `error` is a server message shown as it came. */
+/** The Privacy Policy section the personal notice links to (a required anchor of /privacy). */
+export const INVITEE_ANCHOR = "if-someone-invited-you-by-your-number";
+
+const PRIVACY_MAIL = "privacy@resbite.com";
+
+/** `text` split on the phrases in `links` (longest first); `href` is "" for plain text and for a phrase with no link. */
+export function linkedParts(text, links) {
+  const phrases = Object.keys(links).sort((a, b) => b.length - a.length);
+  if (!phrases.length) return text ? [{ text, href: "" }] : [];
+  const pattern = new RegExp(`(${phrases.map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})`);
+  return text
+    .split(pattern)
+    .filter((part) => part !== "")
+    .map((part) => ({ text: part, href: links[part] || "" }));
+}
+
+/**
+ * The notice beside the number field and, on the personal page, the right to object (shown apart).
+ * `who` gave the number on /i/ (the inviter) or decides the request on /r/ (the host).
+ */
+export function numberNotice({ open, who, privacyUrl }) {
+  const policy = privacyUrl ? (open ? privacyUrl : `${privacyUrl}#${INVITEE_ANCHOR}`) : "";
+  const links = { "Privacy Policy": policy, [PRIVACY_MAIL]: `mailto:${PRIVACY_MAIL}` };
+  const notice = linkedParts(open ? PAGE_COPY.openNotice(who) : PAGE_COPY.personalNotice(who), links);
+  if (open) return { notice, objection: null };
+  return {
+    notice,
+    objection: [
+      { text: PAGE_COPY.objectionLabel, href: "", strong: true },
+      { text: " ", href: "" },
+      ...linkedParts(PAGE_COPY.objection, links),
+    ],
+  };
+}
+
+/** The error keys the reducer holds. Anything else in `error` is a server message: shown only when it is one of the
+ * Send SMS hook's own words (HOOK_WORDS), else as the connection copy. */
 const ERROR_KEYS = new Set([
   "ageHelper", "invalidNumber", "wrongNumber", "mismatch", "expired", "wait", "connection", "tooMany", "unavailable",
-  "nameRule", "chooseAnswer",
+  "nameRule", "nameNotAllowed", "chooseAnswer",
+]);
+
+/**
+ * The Send SMS hook's own words (`SMS_COPY` in supabase/functions/_shared/sms-hook.ts, and the app's HOOK_SMS_COPY; a
+ * test keeps the three equal): the only server messages the page shows. Any other Auth message, every `hook_*` error
+ * among them (`hook_timeout`: Auth gave up on the hook), reads as the connection copy.
+ */
+export const HOOK_WORDS = Object.freeze([
+  "Invalid code request.",
+  "We can’t text this number. Check it, or use another number.",
+  "Text messages aren’t available right now. Try again later.",
 ]);
 
 /** The words for an error the reducer holds; "" for none. */
 export function errorText(error, host, inviter) {
   if (!inviter || !inviter.replace(/[\s\u00a0\u200b-\u200d\ufeff]+/g, "")) inviter = host;
   if (!error) return "";
-  if (!ERROR_KEYS.has(error)) return String(error);
+  if (!ERROR_KEYS.has(error)) return HOOK_WORDS.includes(error) ? error : PAGE_COPY.connection;
   const copy = PAGE_COPY[error];
   return typeof copy === "function" ? copy(error === "wrongNumber" ? inviter : host) : copy;
 }
@@ -170,9 +226,6 @@ export function maskNumber(phone, country) {
   if (digits.length < 3) return null;
   return `+${country} ••• ${digits.slice(-3)}`;
 }
-
-/** Only this code is swapped for the stored one in test mode (the server returns null when test mode is off). */
-export const isTestCode = (code) => code === "000000";
 
 export function initialState() {
   return {
@@ -341,15 +394,19 @@ export function rpcError(status, body) {
   if (status === 401 || message === "Sign-in required") return "signedOut";
   if (body?.code === "22023" && /too many/i.test(message)) return "tooMany";
   if (body?.code === "22023" && /name/i.test(message)) return "nameRule";
+  // A blocked term in the name (plan 4, C7): the chat's refusal, exactly; nothing was stored.
+  if (body?.code === "22023" && message === "Not allowed") return "nameNotAllowed";
   if (body?.code === "42501" && /invited number/i.test(message)) return "wrongNumber";
   return "unavailable";
 }
 
-/** POST /auth/v1/otp's error, as the app maps it: the connection, a rate limit, else GoTrue's own message. */
+/** POST /auth/v1/otp's error, as the app maps it: the connection (a `hook_*` error too), a rate limit, the hook's own
+ * words as written, else the connection. */
 export function sendError(status, body) {
   if (offline(status)) return "connection";
+  if (typeof body?.error_code === "string" && body.error_code.startsWith("hook_")) return "connection";
   if (status === 429) return "wait";
-  return typeof body?.msg === "string" && body.msg ? body.msg : "connection";
+  return HOOK_WORDS.includes(body?.msg) ? body.msg : "connection";
 }
 
 /** POST /auth/v1/verify's error: GoTrue words wrong and expired codes alike, so the clock tells them apart. */
@@ -385,7 +442,7 @@ export const keptKey = (code) => `${KEPT_PREFIX}${code}`;
 
 /**
  * What the page stores for one invitation: the session, the full number this page verified for this code, and when
- * the event starts (ms since 1970), after which the entry is dropped.
+ * the event ends (ms since 1970; the start when it has no end), after which the entry is dropped.
  */
 export function keptEntry(session, phone, endsAt) {
   return { session, phone, until: Number.isFinite(endsAt) ? endsAt : null };
@@ -407,7 +464,7 @@ function readEntry(storage, key) {
 export const sameNumber = (session, entry) => phoneKey(entry?.phone) !== "" && phoneKey(session?.phone) === phoneKey(entry?.phone);
 
 /**
- * The entry kept for this code, or null. An entry that is malformed, whose event has started, or whose session holds
+ * The entry kept for this code, or null. An entry that is malformed, whose event has ended, or whose session holds
  * another number than the one verified for this code is dropped, so it is never restored.
  */
 export function readKept(storage, code, now) {
@@ -442,7 +499,7 @@ export function dropKept(storage, code) {
   }
 }
 
-/** Drops every kept entry, for any code, whose event has started or that can't be read. Returns the codes dropped. */
+/** Drops every kept entry, for any code, whose event has ended or that can't be read. Returns the codes dropped. */
 export function sweepKept(storage, now) {
   const dropped = [];
   try {

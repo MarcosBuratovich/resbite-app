@@ -3,19 +3,23 @@ import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } fr
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { LogOut, UserRound } from "lucide-react-native";
-import { Button, Copy, ErrorNote, s } from "../src/design/ui";
+import { Button, Copy, ErrorNote, TextAction, s } from "../src/design/ui";
 import { Chip, FieldCard, announce, useFocusOnChange } from "../src/design/kit";
-import { AppleMark } from "../src/design/AppleMark";
+import { AppleButton } from "../src/design/AppleButton";
 import { colors as c } from "../src/design/tokens";
 import { GUEST_COPY, nameFromSession } from "../src/domain/guestAccount";
 import { PHONE_COPY } from "../src/domain/phoneCopy";
+import { TERMS_COPY } from "../src/domain/termsCopy";
 import { appleSignInAvailable } from "../src/services/appleSignIn";
 import { appleLinkDeps, googleLinkDeps, linkApple, linkGoogle, type LinkResult } from "../src/services/identityLink";
 import { supabase } from "../src/services/supabase";
 import { useAccount } from "../src/state/AccountState";
 import { useApp } from "../src/state/AppState";
 
-/** A phone account's name, asked once. Apple and Google can suggest it; Continue saves it. */
+/**
+ * A phone account's name, asked once. Apple and Google can suggest it; Continue saves it. Like the other gates, it
+ * offers Delete my account and Sign out: an account that stops here can't reach Data & privacy (DEL-2).
+ */
 export default function AboutYou() {
   const { user, refresh } = useAccount();
   const { signOut, signingOut } = useApp();
@@ -100,16 +104,10 @@ export default function AboutYou() {
           {PHONE_COPY.nameRule}
         </Copy>
       )}
+      {appleAvailable ? (
+        <AppleButton hint={PHONE_COPY.appleNameHint} disabled={busy} onPress={() => void link(() => linkApple(appleLinkDeps))} />
+      ) : null}
       <View style={styles.chips}>
-        {appleAvailable ? (
-          <Chip
-            text={GUEST_COPY.apple}
-            icon={AppleMark}
-            hint={PHONE_COPY.appleNameHint}
-            disabled={busy}
-            onPress={() => void link(() => linkApple(appleLinkDeps))}
-          />
-        ) : null}
         <Chip
           text={GUEST_COPY.google}
           hint={PHONE_COPY.googleNameHint}
@@ -127,7 +125,13 @@ export default function AboutYou() {
         hint={valid ? undefined : PHONE_COPY.nameRule}
         onPress={() => void save()}
       />
-      <View style={styles.chips}>
+      <View style={styles.exits}>
+        <TextAction
+          destructive
+          title={TERMS_COPY.deleteAccount}
+          disabled={busy}
+          onPress={() => router.push("/delete-account")}
+        />
         <Chip text="Sign out" icon={LogOut} disabled={signingOut} onPress={() => void signOut().catch(() => {})} />
       </View>
         </ScrollView>
@@ -138,5 +142,6 @@ export default function AboutYou() {
 
 const styles = StyleSheet.create({
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  exits: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8 },
   helper: { color: c.muted, fontSize: 14 },
 });

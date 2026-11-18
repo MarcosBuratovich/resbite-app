@@ -31,7 +31,6 @@ if [ "$mode" = full ]; then
     echo "PASS: $(basename "$sql")"
   done
   "$repo/supabase/tests/local/concurrency.sh" "$pg_bin" "$work" 55437
-  "$repo/supabase/tests/local/registration-details-concurrency.sh" "$pg_bin" "$work" 55437
   "$repo/supabase/tests/local/photo-cleanup-concurrency.sh" "$pg_bin" "$work" 55437
   "$repo/supabase/tests/local/avatar-revision-concurrency.sh" "$pg_bin" "$work" 55437
   "$repo/supabase/tests/local/join-by-link-concurrency.sh" "$pg_bin" "$work" 55437
@@ -42,6 +41,8 @@ if [ "$mode" = full ]; then
   "$repo/supabase/tests/local/circles-concurrency.sh" "$pg_bin" "$work" 55437
   "$repo/supabase/tests/local/chat-groups-concurrency.sh" "$pg_bin" "$work" 55437
   "$repo/supabase/tests/local/chat-safety-concurrency.sh" "$pg_bin" "$work" 55437
+  "$repo/supabase/tests/local/account-deletion-concurrency.sh" "$pg_bin" "$work" 55437
+  "$repo/supabase/tests/local/retention-deletion-concurrency.sh" "$pg_bin" "$work" 55437
 else
   baseline="$repo/supabase/tests/hosted-baseline"
   while read -r name _; do

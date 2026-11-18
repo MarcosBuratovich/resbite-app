@@ -2,16 +2,15 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { foldLanded, foldNext, foldPhoneAccount, retryFold, sendFoldCode, type FoldClientDeps } from "./phoneFold";
 import { PHONE_COPY } from "../domain/phoneCopy";
-import { PHONE_CODE_COPY } from "./phoneCode";
+import { PHONE_CODE_COPY, type AuthError } from "./phoneCode";
 
 const phone = "+447700900834";
 
-function harness(o: { status?: number; verify?: { status?: number; message: string } | null; exchange?: string | null; throwCall?: boolean; appToken?: string | null; now?: number } = {}) {
-  const calls = { otp: [] as unknown[], verify: [] as unknown[], exchange: [] as unknown[], fold: [] as unknown[], mainAuth: 0 };
+function harness(o: { status?: number; verify?: { status?: number; message: string } | null; throwCall?: boolean; appToken?: string | null; now?: number } = {}) {
+  const calls = { otp: [] as unknown[], verify: [] as unknown[], fold: [] as unknown[], mainAuth: 0 };
   const d: FoldClientDeps = {
     signInWithOtp: async (a) => (calls.otp.push(a), { error: null }),
     verifyOtp: async (a) => (calls.verify.push(a), { error: o.verify ?? null, accessToken: "foreign" }),
-    exchangeTestCode: async (p, c) => (calls.exchange.push([p, c]), o.exchange ?? null),
     appAccessToken: async () => (o.appToken === undefined ? "app" : o.appToken),
     callFold: async (a) => {
       calls.fold.push(a);
@@ -30,17 +29,31 @@ test("the code goes to the isolated client with shouldCreateUser off", async () 
   assert.equal(h.calls.mainAuth, 0);
 });
 
-test("000000 is swapped for the stored code before the isolated verify", async () => {
-  const h = harness({ exchange: "123456" });
+test("the fold's send shows only the hook's words; a hook timeout or any other Auth message is the connection", async () => {
+  const send = (error: AuthError) => sendFoldCode({ signInWithOtp: async () => ({ error }), now: () => 1_000 }, phone);
+  const words = "We can’t text this number. Check it, or use another number.";
+  assert.deepEqual(await send({ status: 422, message: words }), { ok: false, message: words });
+  for (const error of [
+    { status: 422, code: "hook_timeout", message: "Failed to reach hook within maximum time of 5.000000 seconds" },
+    { status: 422, code: "hook_timeout_after_retry", message: "Failed to reach hook after maximum retries" },
+    { status: 422, code: "hook_timeout", message: words },
+    { status: 400, code: "validation_failed", message: "Invalid phone number format (E.164 required)" },
+    { status: 400, message: "Unsupported phone provider" },
+  ])
+    assert.deepEqual(await send(error), { ok: false, message: PHONE_CODE_COPY.connection }, error.code ?? error.message);
+  assert.deepEqual(await send({ status: 422, code: "otp_disabled", message: "Signups not allowed for otp" }), { ok: false, message: PHONE_CODE_COPY.taken });
+  assert.deepEqual(await send({ status: 429, message: "x" }), { ok: false, message: PHONE_CODE_COPY.wait });
+});
+
+test("000000 goes to the isolated verify as typed", async () => {
+  const h = harness();
   assert.deepEqual(await foldPhoneAccount(h.d, phone, "000000", 1_000), { ok: true });
-  assert.deepEqual(h.calls.exchange, [[phone, "000000"]]);
-  assert.deepEqual(h.calls.verify, [{ phone, token: "123456", type: "sms" }]);
+  assert.deepEqual(h.calls.verify, [{ phone, token: "000000", type: "sms" }]);
 });
 
 test("the function call carries both tokens", async () => {
   const h = harness();
   await foldPhoneAccount(h.d, phone, "123 456", 1_000);
-  assert.deepEqual(h.calls.exchange, []);
   assert.deepEqual(h.calls.fold, [{ appToken: "app", body: { foreign_token: "foreign", phone } }]);
 });
 
@@ -49,7 +62,7 @@ test("503, 404, 403, 409, 401, 500 and connection failures map to their copy", a
   // Switched off (503) or not deployed (404): the same words, and no Retry.
   for (const status of [503, 404])
     assert.deepEqual(await r({ status }), { ok: false, message: PHONE_COPY.foldOff, clear: false, verified: true, blocked: true });
-  assert.equal(PHONE_COPY.foldOff, "Bringing an invitation into this account isn’t switched on yet.");
+  assert.equal(PHONE_COPY.foldOff, "Bringing an invitation into this account isn’t available right now.");
   // Refused: the taken copy with its support line, no kept proof, and no Retry.
   for (const status of [403, 409])
     assert.deepEqual(await r({ status }), { ok: false, message: PHONE_COPY.taken, clear: false, verified: true, blocked: true });
@@ -78,7 +91,7 @@ test("a signed-out app session calls nothing", async () => {
 });
 
 test("the deps expose no way to touch the app's auth session", () => {
-  assert.deepEqual(Object.keys(harness().d).sort(), ["appAccessToken", "callFold", "exchangeTestCode", "now", "signInWithOtp", "verifyOtp"]);
+  assert.deepEqual(Object.keys(harness().d).sort(), ["appAccessToken", "callFold", "now", "signInWithOtp", "verifyOtp"]);
 });
 
 test("a 500 then a retry with the kept token posts again without verifying again", async () => {

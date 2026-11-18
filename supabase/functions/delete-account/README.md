@@ -1,40 +1,133 @@
-# Account deletion — prepared, not deployed
+# Account deletion: delete-account and cleanup-account
 
-This feature is source-gated off by `ACCOUNT_DELETION_RELEASE_APPROVED` in `_shared/deletion-release.ts`, in addition to `ACCOUNT_DELETION_ENABLED` on the server and `EXPO_PUBLIC_ACCOUNT_DELETION_ENABLED` in the app. Environment flags alone cannot activate requests or cleanup. Receipt purge has an additional independent source gate. No hosted migration, worker schedule, real deletion or email was executed for this milestone.
+Built locally for the App Store release (plan 2, spec C2: `docs/superpowers/plans/2026-11-17-asr-2-account-deletion.md`). Not deployed. The receipt purge has its own [README](../purge-deletion-receipts/README.md).
 
-## Request and recovery
+Every account that can sign in can delete itself in the app, suspended accounts too. Deletion finishes within 30 days, usually within minutes.
 
-`delete-account` accepts POST `{ action: "request", requestId, recoveryToken, proof }`. Authorization must be the current user access token. The proof is a separate, freshly authenticated session for the **same** user. Auth validates both tokens; the handler then checks a password/OTP AMR timestamp within five minutes. Token refresh/iat and editable metadata never authorize deletion. SQL additionally requires the proof session in `auth.sessions`, freshly created for that user, verified email and tester eligibility. The app offers password or email code and never persists those credentials/proofs.
+## The gates
 
-A random 256-bit recovery secret and request UUID are saved in secure device storage before submission. Only its SHA-256 digest is stored server-side. `{ action: "status", requestId, recoveryToken }` returns only queued/processing/complete, even after the Auth account is removed. Invalid secrets receive an indistinguishable 404. This receipt stays on the originating device for recovery; losing it can require support. Never log request bodies, tokens, URLs or upstream error bodies.
+- **Source gates.** `ACCOUNT_DELETION_RELEASE_APPROVED` in `_shared/deletion-release.ts` is `false`. Until it is flipped (the rollout's step 5, with the owner's approval) `delete-account`, `cleanup-account` and `purge-deletion-receipts` answer 503 and call nothing, whatever the environment says. `_shared/deletion-release.test.ts` checks that.
+- **Server flag.** `ACCOUNT_DELETION_ENABLED=true` turns on all three functions once the gate is open.
+- **App flag.** `EXPO_PUBLIC_ACCOUNT_DELETION_ENABLED=true` shows Delete account in the app.
 
-On acceptance the database removes the roster entry, blocks all eligible reads/mutations (including old JWTs), redacts the profile and organizer notes/place/coordinates, cancels future owned plans once, revokes relevant links, removes the user's attendee memberships/endpoints/outbox, and journals cleanup atomically. Other participants retain cancelled plan records with a neutral organizer. The same request/secret retries safely. Mutation RPCs and Storage insert/update authorization serialize with deletion using a per-user advisory lock and recheck eligibility.
+## delete-account: the actions
 
-After acceptance the edge handler attempts global session revocation. Failure does not undo the database access block. Local cleanup removes account drafts as well as groups, selections, invitations and pending photo data, then signs out locally. Failed cleanup remains retryable and does not resume writes.
+POST with a JSON body of at most 16 KB. `OPTIONS` answers the CORS preflight.
 
-## Cleanup worker
+- **Request**: `{"action":"request","requestId","recoveryToken","proof","appleAuthorizationCode"?}`.
+  - `Authorization: Bearer <the current access token>`.
+  - `proof` is the access token of a fresh sign-in of the same account (below).
+  - `appleAuthorizationCode` comes only after an Apple re-authentication. When present it must match `[A-Za-z0-9._-]`, 1 to 1024 characters.
+  - Answers:
+    - 202 `{requestId, status}`: accepted;
+    - 400 `Invalid request` (a malformed body or Apple code) or `Invalid recovery receipt`;
+    - 401: no fresh proof of the same account;
+    - 503 `Request unconfirmed`: the app keeps its receipt and asks for the status.
+- **Status**: `{"action":"status","requestId","recoveryToken"}`.
+  - No sign-in: the receipt is the secret, so it still works after the Auth account is gone.
+  - 200 `{requestId, status}`, where the status is `queued`, `processing` or `complete`.
+  - 404 for an unknown request or a wrong token, the same answer for both.
+  - 503 when the database can't answer.
 
-`cleanup-account` accepts POST only with its separate 32+ character `ACCOUNT_CLEANUP_SECRET` as bearer authorization. It claims leased jobs, removes private photo objects **through the Storage HTTP API**, hard-deletes the Auth account through the Admin API (profile cascades; retained plan owner becomes null), then marks complete only after SQL verifies active Auth/profile/photo metadata is absent. Storage/Auth failures retain jobs with bounded-backoff retries. Expired lease results cannot finish another worker's claim. A batch processes two accounts and at most ten 100-object pages per account; more work is left queued.
+The receipt is a request id (a UUID) and a 256-bit recovery token. The app saves both in secure storage before it sends the request. The server keeps only the token's SHA-256.
 
-Service credentials remain server-only. Neither edge function accepts caller-selected cleanup users or object paths. Keep `SUPABASE_SERVICE_ROLE_KEY` out of the app.
+Nothing logs a request body, a token, an Apple code, a URL or an upstream error body.
 
-## Activation prerequisites
+## The proof, per account (ASR2-2)
 
-Before changing the checked-in release gates, complete the independent deletion-ledger and restore mechanism described in `qa/b0-retention-proposal.md`, its rehearsal, retention approval and isolated provider acceptance. These gates prevent accidental activation; they do not implement that recovery mechanism.
+The app asks for the proof that fits how the account signs in:
 
-- Review and deploy the local migrations through the project migration workflow, then run hosted advisors and real Auth/Storage integration tests in an isolated test environment.
-- Configure each function with `verify_jwt = false`: handlers perform their own authorization; status uses the recovery secret and cleanup uses its dedicated worker secret. A gateway-only JWT check would break recovery after account removal.
-- Configure password/Google login and SMTP. The email OTP template must expose `{{ .Token }}`; an ordinary magic-link-only message cannot complete the code form.
-- Configure the cleanup schedule and monitor queued/failed work before enabling the client flag. Apply request throttling at the gateway (especially status), use TLS, and restrict operator access to logs.
-- Approve deletion-job/backup/log retention and support handling. The implementation intentionally does **not** claim backups or admin job receipts are immediately erased. Minimal job identifiers/hashes currently remain for recovery; their purge policy must be approved/configured before testers enter.
-- Test late uploads against the actual Storage service, session revocation, partial retries, no-profile users, linked Google/email identities and receipt recovery after hard deletion. The PostgreSQL harness supplies minimal Auth/Storage tables; it is not this HTTP integration acceptance.
+1. Apple linked: Sign in with Apple. It is also the only way to get the code that revokes the account's Apple tokens.
+2. Otherwise, an email or Google account: a code by email, with "Use my password instead" when the account has the `email` provider.
+3. Otherwise, a verified phone: a code by SMS.
+4. Otherwise: the person emails privacy@resbite.com.
 
-## Offline verification
+The server checks it in `freshIdentity` (`_shared/account-deletion.ts`), after Auth has verified both tokens:
 
-`./scripts/test-database.sh` always creates its own disposable PostgreSQL cluster (no remote URL input). `node --experimental-transform-types --test supabase/functions/_shared/*.test.ts` runs Node 22 injected worker tests with no provider calls. Mobile `npm run check` includes deletion recovery/lifecycle tests. `node scripts/verify-deletion.mjs` checks the default-disabled UI; the script supports a separately enabled/intercepted QA bundle as documented in its source.
+- The proof needs an `amr` entry from the last five minutes (at most 30 seconds ahead).
+- `password` and `otp` count for every account. Supabase records an email or SMS code as `otp`.
+- `oauth` counts when the proof's `app_metadata.providers` include `apple`.
+- A token refresh never counts. The providers come from the verified token, never from `user_metadata`.
 
-Signed photo URLs already issued can remain usable until their short expiry/file removal. Copies made outside Resbite cannot be recalled. Orphan-photo cleanup for active accounts is a separate outstanding retention task; account deletion enumerates **all** objects under that account's prefix.
+## The request path (D-4)
 
-## Ledger-backed admission preparation — 29 September
+After the proof, `delete-account` makes one call, as `service_role`: `request_account_deletion(p_user, p_session, p_request, p_recovery)`, from `supabase/migrations/20261117110000_account_deletion_release.sql`.
 
-The unconfigured gateway now rejects deletion requests. `withLedger(project, recorder)` uses the prepared reservation and activation RPCs through the verified-ledger coordinator. The entry point is still source-disabled and has no ledger credentials/configuration. Local migration `20260929125858_deletion_intent_reservations.sql` is not deployed. See `qa/deletion-recovery-ledger.md` for exact evidence and remaining restore/reconciliation/provider work. Do not enable the old direct-request path.
+- An existing request answers first, when the id and the token match. A retry after the proof has gone stale gets its receipt back. Another request for the same account is refused.
+- Otherwise the SQL asks for the proof's session in `auth.sessions`, made for this user in the last five minutes, a confirmed email or phone, and an account that isn't anonymous. A suspended account may delete itself (D-19).
+- Then, in one transaction, it closes the account (its future resbites are cancelled and their guests told) and erases the rest.
+- Under a legal hold only the close step runs. The job is `held`, and every answer reads it as `queued`.
+
+The gateway accepts only an answer with the same request id and a status of `queued`, `processing` or `complete`. Anything else answers 503.
+
+There is no separate ledger. The September prepare-and-activate path and its independent encrypted ledger are retired (D-4), and their modules are gone. After a backup restore, deletions are replayed from a receipts export taken from the live database first: see the [restore procedure](../../../qa/deletion-restore-procedure.md).
+
+Banned, web-only and under-18 accounts can't delete themselves in the app. The team deletes them with `supabase/ops/delete-account.sql` (AS-R3), which runs the same lifecycle.
+
+## After acceptance: the logout, then Apple
+
+The order is the deletion, then the Supabase logout, then Apple. Neither step can undo or hide an accepted deletion: a failure is ignored and the answer is still 202.
+
+1. `POST /auth/v1/logout?scope=global` with the proof token ends every session of the account.
+2. Apple (ASR2-8, DEL-4), only when the request carried `appleAuthorizationCode` and the verified proof's providers include `apple`. `_shared/apple-revocation.ts`:
+   - exchanges the code at `https://appleid.apple.com/auth/token`;
+   - then revokes the refresh token, or else the access token, at `https://appleid.apple.com/auth/revoke`;
+   - gives each call a 5-second timeout, logs nothing and reads no error body.
+
+Its client secret is an ES256 JWT signed with a Sign in with Apple key. Four function secrets:
+
+| Secret | Value |
+| --- | --- |
+| `APPLE_TEAM_ID` | the Apple Developer team id (10 characters) |
+| `APPLE_KEY_ID` | the Sign in with Apple key's id (10 characters) |
+| `APPLE_CLIENT_ID` | the app's bundle id, `com.resbite.app` |
+| `APPLE_PRIVATE_KEY` | the `.p8` key on one line, with `\n` for each line break |
+
+Until all four are set and well formed, the Apple step is skipped and the deletion still runs. Keep the `.p8` file outside the repository.
+
+## cleanup-account: the worker
+
+POST with `Authorization: Bearer <ACCOUNT_CLEANUP_SECRET>`. The cron calls it every five minutes.
+
+- Each run claims at most two jobs (`claim_account_deletions`), each on a five-minute lease. It skips an account under a legal hold. Once a hold is lifted, the claim first runs the erase step the hold parked.
+- For each job, up to 10 pages of at most 100 files:
+  - `deletion_storage_objects` lists the account's files in both buckets, `profile-photos/<uid>/` and `plan-covers/<uid>/` (ASR2-9). It refuses once the lease has passed and while a legal hold names the account.
+  - The whole page is checked first. Each bucket must be one of the two, and each name must start with `<uid>/` and hold no `..`. One bad entry stops the job before anything is removed.
+  - Then one Storage API call per bucket on the page: `DELETE /storage/v1/object/<bucket>` with the names.
+- An empty page means nothing is left. The worker hard-deletes the Auth user through the Admin API, and the profile goes with it. Then `finish_account_deletion` completes the job, but only when the Auth user, the profile and both folders are gone.
+- Any failure keeps the job open. It is tried again after a wait that starts at a minute and doubles, up to an hour.
+
+Replaced covers of live accounts are not this worker's job (C3).
+
+## Configuration
+
+- `ACCOUNT_DELETION_ENABLED=true` for all three functions.
+- `ACCOUNT_CLEANUP_SECRET` for `cleanup-account`: at least 32 characters, for example `openssl rand -hex 32`. The receipt purge has its own secret and flag.
+- The four Apple secrets above, for `delete-account`.
+- `verify_jwt = false` for all three functions: `supabase functions deploy <name> --no-verify-jwt`. Each handler checks its own caller. The request verifies both tokens with Auth, the status uses the receipt and must work after the account is gone, and the workers use their secrets.
+- `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` come from the platform. The service key stays on the server, never in the app.
+
+## The schedule
+
+`supabase/ops/schedule-account-deletion.sql` is owner-run in the SQL editor. It schedules `cleanup-account` every five minutes and `purge-deletion-receipts` daily at 03:32 UTC, with pg_cron, pg_net and four Vault secrets: `cleanup_account_url`, `cleanup_account_secret`, `purge_deletion_receipts_url` and `purge_deletion_receipts_secret`. `select cron.unschedule('cleanup-account');` stops the worker.
+
+## Limits
+
+- A signed photo URL already handed out can work until it expires or its file is removed.
+- Copies made outside Resbite can't be recalled.
+
+## Offline tests
+
+From the repository root. Node 22 on Linux can't strip TypeScript, so use the tsx loader:
+
+```bash
+node --import ./mobile/node_modules/tsx/dist/loader.mjs --test supabase/functions/_shared/*.test.ts
+bash scripts/test-database-docker.sh
+```
+
+- `_shared/account-deletion.test.ts`: the proof rule, the handler's order and answers, the cleanup and the gateway.
+- `_shared/apple-revocation.test.ts`: the Apple client secret and revocation.
+- `_shared/deletion-release.test.ts`: each entry point stays inert while its source gate is false.
+- `supabase/tests/account-deletion-release.sql` (both modes) and `supabase/tests/local/account-deletion-concurrency.sh` (full mode): the SQL lifecycle.
+
+No test calls Supabase, Apple or any other live service.

@@ -2,14 +2,26 @@
 // never carry event details. Run from mobile/: node --import tsx ../links/generate.test.mjs
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { generate, INVITE_CSP } from "./generate.mjs";
+import { PAGE_CSP } from "./server/lib/render.mjs";
+import { FORM_CSP } from "./server/lib/site.mjs";
 
-async function site() {
+function respond() {
+  const res = { headers: {}, code: 200, body: "" };
+  res.setHeader = (k, v) => { res.headers[k] = v; };
+  res.status = (c) => { res.code = c; return res; };
+  res.send = (b) => { res.body = b; return res; };
+  res.end = (b) => { res.body = b ?? ""; return res; };
+  return res;
+}
+
+async function site(options = { legal: "draft" }) {
   const dir = await mkdtemp(join(tmpdir(), "resbite-links-"));
-  await generate("https://link.resbite.com", "ABCDE12345", "com.resbite.app", join(dir, "out"));
+  await generate("https://link.resbite.com", "ABCDE12345", "com.resbite.app", join(dir, "out"), options);
   return { out: join(dir, "out"), cleanup: () => rm(dir, { recursive: true, force: true }) };
 }
 
@@ -91,6 +103,11 @@ test("the event page's functions, assets and routes are part of the site (GI1)",
       { source: "/r/:code", destination: "/api/page?code=:code" },
       { source: "/i/:code/image", destination: "/api/image?kind=personal&code=:code" },
       { source: "/i/:code", destination: "/api/personal?code=:code" },
+      { source: "/privacy", destination: "/privacy.html" },
+      { source: "/terms", destination: "/terms.html" },
+      { source: "/support", destination: "/support.html" },
+      { source: "/delete-account", destination: "/delete-account.html" },
+      { source: "/support/sent", destination: "/support-sent.html" },
     ]);
     assert.deepEqual(vercel.functions, { "api/image.mjs": { includeFiles: "{resbite-mark.png,activities/**}" } });
     // /i/ is web-only: Apple's file lists neither it nor anything beyond /invite and /r/*.
@@ -99,8 +116,11 @@ test("the event page's functions, assets and routes are part of the site (GI1)",
     assert.ok(!aasa.includes("/i/"));
     assert.match(await readFile(join(out, "hosting-requirements.txt"), "utf8"), /SUPABASE_SECRET_KEY \(cover photos only\)/);
     // The deployed folder carries no key: the functions read them from the environment.
-    for (const name of ["api/page.mjs", "api/image.mjs", "api/personal.mjs", "lib/personal.mjs", "lib/options.mjs", "lib/supabase.mjs"])
-      assert.ok(!/sb_(secret|publishable)_[A-Za-z0-9]/.test(await readFile(join(out, name), "utf8")), name);
+    for (const name of ["api/page.mjs", "api/image.mjs", "api/personal.mjs", "lib/personal.mjs", "lib/options.mjs", "lib/supabase.mjs", "api/contact.mjs", "lib/contact.mjs", "lib/mailer.mjs", "lib/rate-limit.mjs", "lib/site.mjs"]) {
+      const text = await readFile(join(out, name), "utf8");
+      assert.ok(!/sb_(secret|publishable)_[A-Za-z0-9]/.test(text), name);
+      assert.ok(!/re_[A-Za-z0-9]{8,}/.test(text), name);
+    }
   } finally {
     await cleanup();
   }
@@ -117,4 +137,60 @@ test("the site carries the phone library bundle and the country list as a module
   } finally {
     await cleanup();
   }
+});
+
+test("a final build refuses unfinished documents before writing anything, and says how to build anyway", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "resbite-links-"));
+  try {
+    await assert.rejects(generate("https://link.resbite.com", "ABCDE12345", "com.resbite.app", join(dir, "out")), (e) =>
+      /not ready to publish/.test(e.message) && e.message.includes("--legal=draft") && e.message.includes("--legal=off"));
+    await assert.rejects(readdir(join(dir, "out")), /ENOENT/);
+    await assert.rejects(generate("https://link.resbite.com", "ABCDE12345", "com.resbite.app", join(dir, "x"), { legal: "maybe" }), /Usage/);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test("the draft build has the four pages, the sent page, their routes and headers, in London", async () => {
+  const { out, cleanup } = await site();
+  try {
+    const vercel = JSON.parse(await readFile(join(out, "vercel.json"), "utf8"));
+    const headers = (source) => Object.fromEntries(vercel.headers.find((h) => h.source === source).headers.map((h) => [h.key, h.value]));
+    assert.deepEqual(vercel.regions, ["lhr1"]);
+    for (const [route, file] of [["/privacy", "privacy.html"], ["/terms", "terms.html"], ["/support", "support.html"], ["/delete-account", "delete-account.html"]]) {
+      assert.ok(vercel.rewrites.some((r) => r.source === route && r.destination === `/${file}`), route);
+      for (const source of [route, `/${file}`]) {
+        assert.equal(headers(source)["Content-Security-Policy"], route === "/support" ? FORM_CSP : PAGE_CSP, source);
+        assert.equal(headers(source)["X-Robots-Tag"], "noindex, nofollow", source);
+        assert.equal(headers(source)["Referrer-Policy"], "no-referrer", source);
+      }
+      assert.ok((await readFile(join(out, file), "utf8")).includes("draft-banner"), file);
+    }
+    assert.equal(headers("/support/sent")["X-Robots-Tag"], "noindex, nofollow");
+    assert.equal(await readFile(join(out, "lib/legal-mode.mjs"), "utf8"), 'export const LEGAL_MODE = "draft";\n');
+    for (const name of ["api/contact.mjs", "support-sent.html", "site.css", "legal.css"]) assert.ok((await readFile(join(out, name))).length > 0, name);
+    assert.match(await readFile(join(out, "hosting-requirements.txt"), "utf8"), /RESEND_API_KEY[\s\S]*lhr1|lhr1[\s\S]*RESEND_API_KEY/);
+  } finally { await cleanup(); }
+});
+
+test("off leaves out everything that depends on the documents", async () => {
+  const { out, cleanup } = await site({ legal: "off" });
+  try {
+    for (const name of ["privacy.html", "support-sent.html", "api/contact.mjs", "legal.css"]) await assert.rejects(readFile(join(out, name)), /ENOENT/, name);
+    const vercel = JSON.parse(await readFile(join(out, "vercel.json"), "utf8"));
+    assert.ok(!vercel.rewrites.some((r) => r.source === "/privacy") && vercel.regions[0] === "lhr1");
+    assert.ok(!(await readFile(join(out, "invite.html"), "utf8")).includes("site-footer"));
+    const personal = (await import(pathToFileURL(join(out, "api", "personal.mjs")).href)).default;
+    const res = respond();
+    await personal({ query: { code: "nope" } }, res, {});
+    assert.ok(res.body.includes("This invitation is no longer active.") && !res.body.includes("Resbite Ltd"));
+  } finally { await cleanup(); }
+});
+
+test("/invite: neutral words, the shared styles, and the footer", async () => {
+  const { out, cleanup } = await site();
+  try {
+    const page = await readFile(join(out, "invite.html"), "utf8");
+    assert.ok(!/private testing|beta|tester/i.test(page) && !page.includes("{{"));
+    assert.ok(page.includes("If you don’t have Resbite yet, ask the person who invited you."));
+    assert.ok(page.includes('<link rel="stylesheet" href="/site.css" />') && page.indexOf("</main>") < page.indexOf('<footer class="site-footer">'));
+  } finally { await cleanup(); }
 });

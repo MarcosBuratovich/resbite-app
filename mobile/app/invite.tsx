@@ -59,6 +59,7 @@ export default function Invite() {
     accountGate({
       status: account.status,
       phoneVerified: phoneVerified(account.user),
+      termsNeeded: account.termsNeeded,
       name,
       profileReady: account.profileReady,
     }) === null;
@@ -241,7 +242,7 @@ export default function Invite() {
           <View style={styles.tick}>
             <TickRow
               label={GUEST_COPY.tick}
-              hint={GUEST_COPY.terms}
+              hint={GUEST_COPY.tickHint}
               checked={ticked}
               onChange={(next) => {
                 setTicked(next);

@@ -119,9 +119,6 @@ try {
     await page.getByRole("radio", { name: "Past", exact: true }).click();
     await shot("plans-past");
     // UX4 Profile and settings in preview, then People lists with gluestack keyboard selection.
-    await page.getByRole("tab", { name: "Wellness", exact: true }).click();
-    await expect(heading(page, "Wellness")).toBeVisible();
-    await shot("wellness");
     await page.getByRole("tab", { name: "Profile", exact: true }).click();
     await expect(heading(page, "Profile")).toBeVisible();
     await shot("profile");
@@ -138,15 +135,14 @@ try {
     const closed = () => expect(page.getByRole("button", { name: "Close sheet" })).toHaveCount(0);
     await closed();
     // Task 8 (K-N5): the chat's line, hedged as Delete account's What happens is, followed by chat plan 3's lines on what a
-    // report keeps (G-S11) and how long blocks stay (ruling SR4); and the samples line without the sample chat, and without "this build does not send push
-    // notifications".
-    await button(page, "Chat messages").click();
+    // report keeps (G-S11) and how long blocks stay (ruling SR4).
+    await button(page, "Resbites and chat").click();
     const chatLine = page.getByText(
-      "Chat messages are stored on Resbite’s servers so everyone in a resbite’s chat can read them, including people who join later. They are not end-to-end encrypted. Deleting your account removes the text of your messages as cleanup finishes. Review account deletion’s availability in this build under Delete account.",
+      "Chat messages are stored on our servers so everyone in a resbite’s chat can read them, including people who join later. They aren’t end-to-end encrypted.",
       { exact: true },
     );
     const reportsLine = page.getByText(
-      "If you report a message or a person, the Resbite team reads the report and keeps a copy of what was reported, even if the message or that person’s account is deleted. If you delete your account, the reports you sent are deleted too. A report is deleted 180 days after the team closes it.",
+      "If you report a message or a person, the Resbite team reads the report and keeps a copy of what was reported, even if the message or that person’s account is deleted. If you delete your account, the reports you sent are kept until the team closes them, without your name. A report is deleted 180 days after the team closes it.",
       { exact: true },
     );
     const blocksLine = page.getByText("Blocks stay until you undo them. The Resbite team can see who blocked whom.", { exact: true });
@@ -157,20 +153,13 @@ try {
     await shot("privacy-chat", false);
     await button(page, "Close sheet").click();
     await closed();
-    await button(page, "Preview & samples").click();
-    await expect(
-      page.getByText("Preview actions stay on this device. Wellness figures are fictional, and there is no wellness tracking.", { exact: true }),
-    ).toBeVisible();
-    await expect(page.getByText(/push notifications|Sample conversations|live messaging/)).toHaveCount(0);
-    await button(page, "Close sheet").click();
-    await closed();
     await button(page, "Delete account").click();
     await expect(heading(page, "Delete account")).toBeVisible();
     await shot("delete-account");
     await button(page, "What happens").click();
     await shot("delete-what-happens", false);
     await button(page, "Close sheet").click();
-    await button(page, "Privacy").click();
+    await button(page, "Back").click();
     await button(page, "Profile").click();
     await expect(heading(page, "Profile")).toBeVisible();
     await page.getByRole("button", { name: "People lists", exact: true }).click();
@@ -248,7 +237,7 @@ try {
     if (errors.length) throw Error(errors.join("\n"));
     await page.close();
   }
-  // UX4 preview screens under Larger Text at 320 px: Profile, Notifications, Privacy, Delete account and Wellness.
+  // UX4 preview screens under Larger Text at 320 px: Profile, Notifications, Privacy and Delete account.
   {
     const page = await browser.newPage({ viewport: { width: 320, height: 844 }, reducedMotion: "reduce" });
     const errors = [];
@@ -278,8 +267,6 @@ try {
     await page.goto(`${base}/?largeText=1`);
     await page.addStyleTag({ content: '[dir="auto"] { zoom: 1.4; }' });
     await page.getByText("Preview the design", { exact: true }).click();
-    await page.getByRole("tab", { name: "Wellness", exact: true }).click();
-    await visit("wellness", "Wellness");
     await page.getByRole("tab", { name: "Profile", exact: true }).click();
     await visit("profile", "Profile");
     await button(page, "Notifications").click();
@@ -1006,9 +993,9 @@ try {
       await expect(page.getByText("Not added", { exact: true })).toBeVisible();
       await visit("account-waiting-requests", "Waiting for access");
       await open("/invite?code=AgeAgeAgeAgeAgeAgeAge6");
-      await expect(page.getByRole("checkbox", { name: "I’m 18 or over", exact: true })).toBeVisible();
+      await expect(page.getByRole("checkbox", { name: "I’m 18 or over and I accept the Terms of Use.", exact: true })).toBeVisible();
       await visit("invite-tick", "You’re invited.");
-      await page.getByRole("checkbox", { name: "I’m 18 or over", exact: true }).click();
+      await page.getByRole("checkbox", { name: "I’m 18 or over and I accept the Terms of Use.", exact: true }).click();
       await expect(button(page, "Continue")).toBeEnabled();
       await visit("invite-tick-ticked", "You’re invited.");
       await page.close();
@@ -1095,7 +1082,7 @@ try {
     const signedOut = await phonePage();
     await open(signedOut, "/auth/phone");
     await signedOut.getByLabel("Mobile number", { exact: true }).fill("07700 900834");
-    await signedOut.getByRole("checkbox", { name: "I’m 18 or over", exact: true }).click();
+    await signedOut.getByRole("checkbox", { name: "I’m 18 or over and I accept the Terms of Use.", exact: true }).click();
     await expect(button(signedOut, "Send code")).toBeEnabled();
     await visit(signedOut, "phone-signup", "Your number");
     await button(signedOut, "Send code").click();

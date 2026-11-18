@@ -238,6 +238,9 @@ export function SendStep({
       {outcome.already.length > 0 && (
         <Copy style={s.muted}>{`${T.alreadyInvited}: ${outcome.already.join(", ")}`}</Copy>
       )}
+      {outcome.unavailable.length > 0 && (
+        <Copy style={s.muted}>{`${T.cannotInvite}: ${outcome.unavailable.join(", ")}`}</Copy>
+      )}
       <ErrorNote message={error} />
       {outcome.links.length > 0 && (
         <>
